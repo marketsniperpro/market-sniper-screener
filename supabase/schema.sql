@@ -1,185 +1,243 @@
 -- =============================================================================
--- MARKET SNIPER - SUPABASE SCHEMA
+-- MARKET SNIPER - VIX SCREENER SCHEMA
 -- =============================================================================
--- Run this in your Supabase SQL Editor to create the tables
+-- Run this in Supabase SQL Editor
+-- This REPLACES the old screener_picks table
 -- =============================================================================
 
--- Signals table - stores all screener picks
-CREATE TABLE IF NOT EXISTS signals (
+-- Drop old table if exists (WARNING: deletes all data)
+DROP TABLE IF EXISTS screener_picks CASCADE;
+
+-- Create new screener_picks table
+CREATE TABLE screener_picks (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+
+    -- Stock info
     ticker VARCHAR(10) NOT NULL,
-    signal_date DATE NOT NULL,
+    company_name VARCHAR(100),
+    pick_date DATE NOT NULL,
+
+    -- Prices
     entry_price DECIMAL(10, 2) NOT NULL,
+    current_price DECIMAL(10, 2),
+    exit_price DECIMAL(10, 2),
+    exit_date DATE,
+    gain_loss_pct DECIMAL(8, 2),
 
-    -- Technical data
-    vix DECIMAL(5, 1),
-    rsi DECIMAL(5, 1),
-    adx DECIMAL(5, 1),
-    pct_below_high DECIMAL(5, 1),
+    -- VIX Strategy Indicators
+    vix DECIMAL(5, 1),                    -- VIX at entry
+    rsi DECIMAL(5, 1),                    -- Daily RSI
+    adx DECIMAL(5, 1),                    -- ADX trend strength
+    correction_pct DECIMAL(5, 1),         -- % below 52-week high
 
-    -- Fundamental data
-    sector VARCHAR(50),
+    -- Volume
+    volume_ratio DECIMAL(5, 2),           -- Current vs avg volume
+    volume_spike BOOLEAN DEFAULT FALSE,   -- Volume > 1.5x avg
+
+    -- Fundamentals
     pe_ratio DECIMAL(10, 2),
-    peg_ratio DECIMAL(10, 2),
     roe DECIMAL(5, 1),
-    debt_equity DECIMAL(10, 2),
-    fund_score INTEGER,
+    debt_equity DECIMAL(5, 2),
 
-    -- Backtest results (historical signals)
-    return_pct DECIMAL(8, 2),
-    exit_day INTEGER,
-    exit_reason VARCHAR(20),
-    pnl DECIMAL(10, 0),
-    is_winner BOOLEAN,
+    -- Signal scoring
+    signal_score INTEGER,                 -- 0-100
+    signal_strength VARCHAR(10),          -- 'strong', 'medium', 'weak'
+    signal_factors TEXT[],                -- Array of contributing factors
 
     -- Status
-    status VARCHAR(20) DEFAULT 'active', -- active, closed, expired
+    status VARCHAR(20) DEFAULT 'active',  -- 'active', 'closed', 'stopped'
+    notes TEXT,
+
+    -- Timestamps
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
 
-    -- Prevent duplicates
-    UNIQUE(ticker, signal_date)
+    -- Prevent duplicate entries per day
+    UNIQUE(ticker, pick_date)
 );
 
--- Index for fast queries
-CREATE INDEX IF NOT EXISTS idx_signals_date ON signals(signal_date DESC);
-CREATE INDEX IF NOT EXISTS idx_signals_ticker ON signals(ticker);
-CREATE INDEX IF NOT EXISTS idx_signals_sector ON signals(sector);
-CREATE INDEX IF NOT EXISTS idx_signals_status ON signals(status);
-CREATE INDEX IF NOT EXISTS idx_signals_fund_score ON signals(fund_score DESC);
+-- Indexes for fast queries
+CREATE INDEX idx_picks_date ON screener_picks(pick_date DESC);
+CREATE INDEX idx_picks_ticker ON screener_picks(ticker);
+CREATE INDEX idx_picks_status ON screener_picks(status);
+CREATE INDEX idx_picks_score ON screener_picks(signal_score DESC);
+CREATE INDEX idx_picks_strength ON screener_picks(signal_strength);
 
--- Performance stats table - aggregated stats
-CREATE TABLE IF NOT EXISTS performance_stats (
-    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-    stat_date DATE NOT NULL UNIQUE,
-    total_signals INTEGER,
-    win_rate DECIMAL(5, 1),
-    avg_return DECIMAL(8, 2),
-    total_pnl DECIMAL(12, 0),
-    profit_factor DECIMAL(5, 2),
-    best_sector VARCHAR(50),
-    worst_sector VARCHAR(50),
-    created_at TIMESTAMPTZ DEFAULT NOW()
+-- =============================================================================
+-- VIX HISTORY TABLE
+-- =============================================================================
+DROP TABLE IF EXISTS vix_history CASCADE;
+
+CREATE TABLE vix_history (
+    date DATE PRIMARY KEY,
+    close_value DECIMAL(6, 2) NOT NULL,
+    is_buy_zone BOOLEAN DEFAULT FALSE  -- VIX 20-35
 );
 
--- Screener runs - track when the screener ran
-CREATE TABLE IF NOT EXISTS screener_runs (
+-- =============================================================================
+-- SCREENER RUNS LOG
+-- =============================================================================
+DROP TABLE IF EXISTS screener_runs CASCADE;
+
+CREATE TABLE screener_runs (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     run_date TIMESTAMPTZ DEFAULT NOW(),
+    vix_value DECIMAL(5, 1),
     signals_found INTEGER,
-    new_signals INTEGER,
     tickers_scanned INTEGER,
-    duration_seconds INTEGER,
+    duration_ms INTEGER,
     status VARCHAR(20) DEFAULT 'success',
     error_message TEXT
 );
 
--- VIX history for display
-CREATE TABLE IF NOT EXISTS vix_history (
-    date DATE PRIMARY KEY,
-    close_value DECIMAL(6, 2) NOT NULL,
-    is_fear_day BOOLEAN DEFAULT FALSE
-);
-
 -- =============================================================================
--- ROW LEVEL SECURITY (Optional - for multi-tenant)
+-- VIEWS
 -- =============================================================================
 
--- Enable RLS
-ALTER TABLE signals ENABLE ROW LEVEL SECURITY;
-ALTER TABLE performance_stats ENABLE ROW LEVEL SECURITY;
-
--- Public read access (anyone can view signals)
-CREATE POLICY "Public read access" ON signals FOR SELECT USING (true);
-CREATE POLICY "Public read access" ON performance_stats FOR SELECT USING (true);
-
--- Service role can insert/update (for the worker)
-CREATE POLICY "Service role insert" ON signals FOR INSERT WITH CHECK (true);
-CREATE POLICY "Service role update" ON signals FOR UPDATE USING (true);
-CREATE POLICY "Service role insert" ON performance_stats FOR INSERT WITH CHECK (true);
-
--- =============================================================================
--- VIEWS FOR EASY QUERYING
--- =============================================================================
-
--- Latest signals view
-CREATE OR REPLACE VIEW latest_signals AS
+-- Active picks sorted by score
+CREATE OR REPLACE VIEW active_picks AS
 SELECT
     ticker,
-    signal_date,
+    company_name,
+    pick_date,
     entry_price,
-    sector,
+    current_price,
+    CASE
+        WHEN current_price IS NOT NULL
+        THEN ROUND(((current_price - entry_price) / entry_price * 100)::numeric, 2)
+        ELSE NULL
+    END as unrealized_pct,
+    rsi,
+    adx,
+    correction_pct,
+    volume_ratio,
     pe_ratio,
-    roe,
-    fund_score,
-    return_pct,
-    is_winner,
-    status
-FROM signals
-WHERE signal_date >= CURRENT_DATE - INTERVAL '30 days'
-ORDER BY signal_date DESC, fund_score DESC;
+    signal_score,
+    signal_strength,
+    signal_factors
+FROM screener_picks
+WHERE status = 'active'
+ORDER BY signal_score DESC, pick_date DESC;
 
--- Top picks view (high quality recent signals)
-CREATE OR REPLACE VIEW top_picks AS
+-- Closed trades with P&L
+CREATE OR REPLACE VIEW closed_trades AS
 SELECT
     ticker,
-    signal_date,
+    company_name,
+    pick_date,
+    exit_date,
     entry_price,
-    sector,
-    pe_ratio,
-    peg_ratio,
-    roe,
-    debt_equity,
-    fund_score,
-    vix,
-    return_pct,
-    is_winner
-FROM signals
-WHERE fund_score >= 8
-  AND signal_date >= CURRENT_DATE - INTERVAL '90 days'
-ORDER BY fund_score DESC, signal_date DESC
-LIMIT 20;
+    exit_price,
+    gain_loss_pct,
+    signal_strength,
+    signal_score,
+    CASE WHEN gain_loss_pct > 0 THEN TRUE ELSE FALSE END as is_winner
+FROM screener_picks
+WHERE status = 'closed'
+ORDER BY exit_date DESC;
 
--- Sector performance view
-CREATE OR REPLACE VIEW sector_performance AS
+-- Performance summary
+CREATE OR REPLACE VIEW performance_summary AS
 SELECT
-    sector,
     COUNT(*) as total_trades,
-    ROUND(AVG(CASE WHEN is_winner THEN 1 ELSE 0 END) * 100, 1) as win_rate,
-    ROUND(AVG(return_pct), 2) as avg_return,
-    SUM(pnl) as total_pnl,
-    ROUND(AVG(fund_score), 1) as avg_fund_score
-FROM signals
-WHERE sector IS NOT NULL
-GROUP BY sector
-ORDER BY total_pnl DESC;
+    COUNT(*) FILTER (WHERE status = 'active') as active_trades,
+    COUNT(*) FILTER (WHERE status = 'closed') as closed_trades,
+    ROUND(AVG(gain_loss_pct) FILTER (WHERE status = 'closed'), 2) as avg_return,
+    ROUND(
+        (COUNT(*) FILTER (WHERE status = 'closed' AND gain_loss_pct > 0)::numeric /
+         NULLIF(COUNT(*) FILTER (WHERE status = 'closed'), 0) * 100), 1
+    ) as win_rate,
+    SUM(gain_loss_pct) FILTER (WHERE status = 'closed') as total_return
+FROM screener_picks;
+
+-- Performance by signal strength
+CREATE OR REPLACE VIEW performance_by_strength AS
+SELECT
+    signal_strength,
+    COUNT(*) as total,
+    COUNT(*) FILTER (WHERE status = 'closed') as closed,
+    ROUND(AVG(gain_loss_pct) FILTER (WHERE status = 'closed'), 2) as avg_return,
+    ROUND(
+        (COUNT(*) FILTER (WHERE status = 'closed' AND gain_loss_pct > 0)::numeric /
+         NULLIF(COUNT(*) FILTER (WHERE status = 'closed'), 0) * 100), 1
+    ) as win_rate
+FROM screener_picks
+GROUP BY signal_strength
+ORDER BY
+    CASE signal_strength
+        WHEN 'strong' THEN 1
+        WHEN 'medium' THEN 2
+        ELSE 3
+    END;
 
 -- =============================================================================
--- FUNCTIONS
+-- ROW LEVEL SECURITY
 -- =============================================================================
 
--- Function to get performance summary
-CREATE OR REPLACE FUNCTION get_performance_summary()
+ALTER TABLE screener_picks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE vix_history ENABLE ROW LEVEL SECURITY;
+ALTER TABLE screener_runs ENABLE ROW LEVEL SECURITY;
+
+-- Public read access
+CREATE POLICY "Public read" ON screener_picks FOR SELECT USING (true);
+CREATE POLICY "Public read" ON vix_history FOR SELECT USING (true);
+CREATE POLICY "Public read" ON screener_runs FOR SELECT USING (true);
+
+-- Service role can write
+CREATE POLICY "Service write" ON screener_picks FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Service write" ON vix_history FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Service write" ON screener_runs FOR ALL USING (true) WITH CHECK (true);
+
+-- =============================================================================
+-- FUNCTION: Update modified timestamp
+-- =============================================================================
+CREATE OR REPLACE FUNCTION update_modified_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_screener_picks_modtime
+    BEFORE UPDATE ON screener_picks
+    FOR EACH ROW
+    EXECUTE FUNCTION update_modified_column();
+
+-- =============================================================================
+-- FUNCTION: Get performance stats
+-- =============================================================================
+CREATE OR REPLACE FUNCTION get_performance_stats()
 RETURNS TABLE (
     total_signals BIGINT,
+    active_count BIGINT,
+    closed_count BIGINT,
     win_rate DECIMAL,
     avg_return DECIMAL,
     total_pnl DECIMAL,
-    profit_factor DECIMAL
+    strong_win_rate DECIMAL,
+    medium_win_rate DECIMAL
 ) AS $$
 BEGIN
     RETURN QUERY
     SELECT
         COUNT(*)::BIGINT,
-        ROUND(AVG(CASE WHEN is_winner THEN 1 ELSE 0 END) * 100, 1),
-        ROUND(AVG(return_pct), 2),
-        SUM(pnl),
-        CASE
-            WHEN SUM(CASE WHEN NOT is_winner THEN ABS(return_pct) ELSE 0 END) > 0
-            THEN ROUND(SUM(CASE WHEN is_winner THEN return_pct ELSE 0 END) /
-                 SUM(CASE WHEN NOT is_winner THEN ABS(return_pct) ELSE 0 END), 2)
-            ELSE 0
-        END
-    FROM signals;
+        COUNT(*) FILTER (WHERE status = 'active')::BIGINT,
+        COUNT(*) FILTER (WHERE status = 'closed')::BIGINT,
+        ROUND(
+            (COUNT(*) FILTER (WHERE status = 'closed' AND gain_loss_pct > 0)::numeric /
+             NULLIF(COUNT(*) FILTER (WHERE status = 'closed'), 0) * 100), 1
+        ),
+        ROUND(AVG(gain_loss_pct) FILTER (WHERE status = 'closed'), 2),
+        ROUND(SUM(gain_loss_pct) FILTER (WHERE status = 'closed'), 2),
+        ROUND(
+            (COUNT(*) FILTER (WHERE status = 'closed' AND gain_loss_pct > 0 AND signal_strength = 'strong')::numeric /
+             NULLIF(COUNT(*) FILTER (WHERE status = 'closed' AND signal_strength = 'strong'), 0) * 100), 1
+        ),
+        ROUND(
+            (COUNT(*) FILTER (WHERE status = 'closed' AND gain_loss_pct > 0 AND signal_strength = 'medium')::numeric /
+             NULLIF(COUNT(*) FILTER (WHERE status = 'closed' AND signal_strength = 'medium'), 0) * 100), 1
+        )
+    FROM screener_picks;
 END;
 $$ LANGUAGE plpgsql;
