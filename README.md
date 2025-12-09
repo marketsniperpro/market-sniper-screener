@@ -1,98 +1,215 @@
-# Market Sniper Screener v2.0
+# Market Sniper Screener v3.0
 
-A Python stock screener designed for finding high-probability swing trading setups with proper risk management.
+A Python stock screener for swing trading with **VIX-based market timing**. Optimized for crash protection while capturing upside.
 
-## Features
+## Backtest Results (2019-2024)
 
-- **Fixed Technical Indicators**: Properly implemented RSI (Wilder's smoothing) and ADX calculations
-- **Volume Confirmation**: Signals require above-average volume (1.3x 50-day average)
-- **Trend Confirmation**: SMA 200 slope must be positive, price near/above SMA
-- **Relative Strength**: Compares stock performance vs SPY benchmark
-- **VIX Filter**: Trades during elevated fear (VIX 18-40) for better entries
-- **Risk Management**: Configurable stops, targets, and trailing stops
-- **Position Sizing**: 1% risk per trade with max 15% position size
-- **Fundamental Filters**: P/E, PEG, Debt/Equity, Profit Margin checks
+```
+Tickers Scanned:  904 (S&P 500 + S&P 400)
+Total Signals:    1,097
+Win Rate:         61%
+Total P&L:        +$320,445
+vs SPY Buy/Hold:  +$128,000 better
+```
 
-## Quick Start (Google Colab)
+### Yearly Performance
+| Year | Signals | Win Rate | P&L |
+|------|---------|----------|-----|
+| 2019 | 149 | 63.1% | +$57,449 |
+| 2020 | 174 | 57.5% | +$45,190 |
+| 2021 | 200 | 62.5% | +$75,213 |
+| 2022 | 159 | 54.7% | +$25,608 |
+| 2023 | 217 | 63.1% | +$67,983 |
+| 2024 | 198 | 65.7% | +$49,002 |
 
-1. Open [market_sniper_colab.ipynb](market_sniper_colab.ipynb) in Google Colab
-2. Run cells 1-3 to install dependencies and load configuration
-3. Adjust settings in Cell 2 if desired
-4. Run remaining cells to scan and analyze results
+## Strategy Overview
 
-## Strategy Logic
+### VIX Market Timing (Key Innovation)
+- **VIX 20-35**: BUY ZONE - Elevated fear = better entries
+- **VIX < 20**: WAIT - Market complacent, poor risk/reward
+- **VIX > 35**: WAIT - Extreme panic, catching falling knives
 
-### Entry Criteria (ALL must be true)
-1. Price 25-50% below 52-week high (pullback, not falling knife)
-2. Price within 12% of rising SMA 200
-3. RSI recently crossed above 45 or bounced from 35
-4. ADX > 20 (trending market)
-5. Volume > 1.3x 50-day average
-6. Relative strength vs SPY > -10%
-7. VIX between 18-40 (optional, can disable)
-8. Passes fundamental checks
+The VIX ceiling of 35 (vs 50) improves crash year performance by ~$20k while maintaining overall returns.
+
+### Entry Criteria
+1. **VIX in range**: 20-35 (market fear without panic)
+2. **Price correction**: 25-50% below 52-week high
+3. **RSI crossover**: Recently crossed above 45
+4. **ADX > 18**: Trending market confirmed
+5. **Volume**: 1.3x above 50-day average
+6. **Near support**: Within 12% of SMA 200
+7. **Fundamentals**: P/E < 30, ROE > 8%, D/E < 2
 
 ### Exit Rules
-- **Stop Loss**: 12% (configurable)
-- **Take Profit**: 36% (3:1 reward/risk)
-- **Trailing Stop**: Activates at +12% gain, trails 8% below highest high
+- **Stop Loss**: 15%
+- **Take Profit**: 50% (3.3:1 R/R)
+- **Trailing Stop**: Activates at +15%, trails 10%
 - **Time Stop**: 90 days max hold
+
+### Signal Scoring (0-100)
+- **Strong (75-100)**: All conditions met, high conviction
+- **Medium (50-74)**: Most conditions met
+- **Weak (<50)**: Marginal setup, lower size
+
+## Quick Start
+
+### Option 1: Google Colab (Backtesting)
+
+1. Upload `backtest_vs_spy.py` to Colab
+2. Set scan mode:
+   ```python
+   SCAN_MODE = 'medium'  # 'fast'=500, 'medium'=900, 'full'=6000 tickers
+   ```
+3. Run all cells
+4. Review results in `backtest_results.csv`
+
+### Option 2: Supabase Edge Function (Live Scanning)
+
+See [INTEGRATION.md](INTEGRATION.md) for full setup.
+
+```bash
+# Deploy Edge Function
+supabase functions deploy stock-screener
+
+# Trigger scan
+curl https://your-project.supabase.co/functions/v1/stock-screener?mode=scan
+```
+
+## File Structure
+
+```
+market-sniper-screener/
+├── backtest_vs_spy.py       # Main backtester with SPY comparison
+├── vix_smart.py             # VIX optimization testing
+├── vix_optimization.py      # VIX ceiling analysis
+├── ticker_fetcher.py        # Dynamic ticker fetching module
+├── screener_balanced.py     # Original balanced screener
+│
+├── supabase/
+│   ├── schema.sql           # Database schema for VIX strategy
+│   └── functions/
+│       └── stock-screener/
+│           └── index.ts     # Deno Edge Function
+│
+├── worker/
+│   └── screener_worker.py   # GitHub Actions worker
+│
+├── app/                     # Next.js components
+│   ├── portal/
+│   │   └── screener/
+│   │       └── page.tsx     # VIX screener page component
+│   ├── api/                 # API routes
+│   ├── components/          # React components
+│   ├── lib/                 # Supabase client
+│   └── types/               # TypeScript types
+│
+└── .github/
+    └── workflows/
+        └── screener.yml     # Daily scan automation
+```
 
 ## Configuration
 
-Edit the configuration section in the notebook or `screener.py`:
-
+### Core Parameters
 ```python
+# VIX Filter (optimized)
+VIX_MIN = 20                  # Minimum fear level
+VIX_MAX = 35                  # Maximum (crash protection)
+
+# Technical
+RSI_SIGNAL = 45               # RSI crossover threshold
+ADX_MIN = 18                  # Minimum trend strength
+MIN_BELOW_HIGH_PCT = 25       # Min correction from high
+MAX_BELOW_HIGH_PCT = 50       # Max correction (not falling knife)
+
 # Risk Management
-STOP_LOSS_PCT = 12.0          # Stop loss percentage
-TAKE_PROFIT_PCT = 36.0        # Take profit (3:1 R/R)
+STOP_LOSS_PCT = 15.0          # Stop loss
+TAKE_PROFIT_PCT = 50.0        # Take profit (3.3:1 R/R)
+TRAIL_ACTIVATION_PCT = 15.0   # Trailing stop activation
+TRAIL_DISTANCE_PCT = 10.0     # Trailing distance
 
-# Trailing Stop
-USE_TRAILING = True
-TRAIL_ACTIVATION_PCT = 12.0   # Activate at 1R
-TRAIL_DISTANCE_PCT = 8.0      # Trail distance
-
-# Filters
-USE_VIX_FILTER = True         # Enable/disable VIX filter
-VIX_MIN = 18                  # Minimum VIX
-VIX_MAX = 40                  # Maximum VIX
-USE_VOLUME_FILTER = True      # Require volume confirmation
-USE_RS_FILTER = True          # Require relative strength
+# Fundamentals
+MAX_PE_RATIO = 30
+MIN_ROE = 8
+MAX_DEBT_EQUITY = 2.0
 ```
 
-## Files
+### Scan Modes
+```python
+SCAN_MODE = 'medium'  # Choose one:
+# 'fast'   - ~500 tickers (S&P 500 only) - 5 min
+# 'medium' - ~900 tickers (S&P 500 + 400) - 10 min
+# 'full'   - ~6000 tickers (all NASDAQ/NYSE) - 60+ min
+```
 
-- `screener.py` - Full standalone Python script
-- `market_sniper_colab.ipynb` - Google Colab notebook version
+## Dynamic Ticker Fetching
 
-## Key Improvements Over v1
+Tickers are fetched dynamically from official sources:
 
-1. **Fixed ADX calculation** - The original had bugs in directional movement logic
-2. **Added volume filter** - Reduces false signals significantly
-3. **Trend confirmation** - SMA slope check prevents catching falling knives
-4. **Relative strength** - Avoids underperforming stocks
-5. **Tighter risk management** - 12% stop vs 15%, better trailing
-6. **VIX range** - Avoids extreme panic (>40) and complacency (<18)
-7. **Better data validation** - Handles missing data, fills small gaps
+1. **NASDAQ Official FTP** (primary)
+   - `nasdaqtraded.txt` - All NASDAQ securities
+   - `otherlisted.txt` - NYSE/AMEX securities
 
-## Typical Results
+2. **Wikipedia** (fallback)
+   - S&P 500, S&P 400, S&P 600, NASDAQ 100
 
-Results vary by market conditions and date range. The screener is designed for:
-- **Win Rate**: 50-65%
-- **Win/Loss Ratio**: 2:1 to 3:1
-- **Average Hold**: 20-45 days
-- **Positive Expectancy**: Target +2-5% per trade average
+3. **Hardcoded fallback** (~500 stocks if APIs fail)
 
-## Disclaimer
+## Database Schema
 
-This screener is for educational and research purposes only. Past backtest performance does not guarantee future results. Always do your own research and risk management before trading.
+The Supabase schema includes:
+
+```sql
+-- Main table
+CREATE TABLE screener_picks (
+  id SERIAL PRIMARY KEY,
+  ticker VARCHAR(10),
+  pick_date DATE,
+  entry_price DECIMAL(10,2),
+  vix DECIMAL(5,2),
+  rsi DECIMAL(5,2),
+  adx DECIMAL(5,2),
+  correction_pct DECIMAL(5,2),
+  volume_ratio DECIMAL(5,2),
+  pe_ratio DECIMAL(10,2),
+  signal_score INTEGER,
+  signal_strength VARCHAR(10),
+  signal_factors TEXT[],
+  -- Exit tracking
+  exit_date DATE,
+  exit_price DECIMAL(10,2),
+  exit_reason VARCHAR(20),
+  return_pct DECIMAL(8,2)
+);
+
+-- Views: active_picks, closed_trades, performance_summary
+```
+
+## Why VIX 20-35?
+
+We tested multiple VIX configurations:
+
+| Configuration | 2020 P&L | 2022 P&L | Total P&L |
+|--------------|----------|----------|-----------|
+| VIX 20-50 (original) | +$37,660 | +$4,983 | +$316,445 |
+| **VIX 20-35 (optimized)** | **+$45,190** | **+$25,608** | **+$320,445** |
+| VIX 20-30 | +$38,421 | +$31,521 | +$287,013 |
+
+The 35 ceiling blocks buying during extreme panic (VIX > 35 typically means panic selling, not capitulation bottoms).
 
 ## Requirements
 
-- Python 3.8+
-- pandas
-- numpy
-- yfinance
+```
+Python 3.8+
+pandas
+numpy
+yfinance
+requests
+```
+
+## Disclaimer
+
+This screener is for educational and research purposes only. Past backtest performance does not guarantee future results. Always do your own research and manage risk appropriately.
 
 ## License
 
