@@ -141,38 +141,60 @@ def get_sp500_tickers():
         print(f"✗ S&P 500 failed: {e}")
         return []
 
-def get_all_tickers():
-    """
-    Fetch US market tickers - uses official NASDAQ sources (most reliable)
-    """
+# =============================================================================
+# SCAN MODE - Choose how many stocks to scan
+# =============================================================================
+# 'fast'   = ~500 stocks  (~5-8 min)   - S&P 500 large caps
+# 'medium' = ~900 stocks  (~10-15 min) - S&P 500 + S&P 400 mid caps
+# 'full'   = ~6000 stocks (~60+ min)   - Entire US market
+SCAN_MODE = 'medium'  # <-- CHANGE THIS
+
+def get_sp400_tickers():
+    """Fetch S&P 400 MidCap from Wikipedia"""
+    try:
+        url = "https://en.wikipedia.org/wiki/List_of_S%26P_400_companies"
+        tables = pd.read_html(url, storage_options={'User-Agent': HEADERS['User-Agent']})
+        df = tables[0]
+        col = 'Symbol' if 'Symbol' in df.columns else 'Ticker Symbol'
+        tickers = df[col].str.replace('.', '-', regex=False).tolist()
+        print(f"✓ S&P 400: {len(tickers)} tickers")
+        return tickers
+    except Exception as e:
+        print(f"✗ S&P 400 failed: {e}")
+        return []
+
+def get_all_tickers(mode='medium'):
+    """Fetch tickers based on scan mode"""
     print("=" * 50)
-    print("Fetching current US market tickers...")
+    print(f"Scan mode: {mode.upper()}")
     print("=" * 50)
 
     all_tickers = []
 
-    # PRIMARY: Official NASDAQ sources (most reliable, no rate limits)
-    all_tickers.extend(get_nasdaq_traded())
-    time.sleep(0.5)
-    all_tickers.extend(get_nyse_listed())
-
-    # BACKUP: If NASDAQ sources fail, try Wikipedia
-    if len(all_tickers) < 100:
-        print("NASDAQ sources failed, trying Wikipedia backup...")
-        time.sleep(1)
+    if mode == 'fast':
+        # S&P 500 only
         all_tickers.extend(get_sp500_tickers())
+    elif mode == 'medium':
+        # S&P 500 + 400 MidCap
+        all_tickers.extend(get_sp500_tickers())
+        time.sleep(0.5)
+        all_tickers.extend(get_sp400_tickers())
+    else:  # 'full'
+        # Entire US market
+        all_tickers.extend(get_nasdaq_traded())
+        time.sleep(0.5)
+        all_tickers.extend(get_nyse_listed())
 
     # Deduplicate and clean
     tickers = sorted(list(set(all_tickers)))
     tickers = [t for t in tickers if t and isinstance(t, str) and 1 <= len(t) <= 5]
 
-    print("=" * 50)
-    print(f"Total unique tickers: {len(tickers)}")
+    print(f"Total tickers: {len(tickers)}")
     print("=" * 50)
     return tickers
 
-# Fetch tickers dynamically (replaces hardcoded list)
-TICKERS = get_all_tickers()
+# Fetch tickers based on scan mode
+TICKERS = get_all_tickers(SCAN_MODE)
 
 # Fallback list if ALL dynamic fetching fails
 if len(TICKERS) < 100:
