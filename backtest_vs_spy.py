@@ -65,70 +65,21 @@ MAX_DEBT_EQUITY = 2.0
 import requests
 from io import StringIO
 
-def get_sp500_tickers():
-    """Fetch current S&P 500 from Wikipedia"""
-    try:
-        url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
-        tables = pd.read_html(url)
-        tickers = tables[0]['Symbol'].str.replace('.', '-', regex=False).tolist()
-        print(f"✓ S&P 500: {len(tickers)} tickers")
-        return tickers
-    except Exception as e:
-        print(f"✗ S&P 500 failed: {e}")
-        return []
-
-def get_sp400_tickers():
-    """Fetch current S&P 400 MidCap from Wikipedia"""
-    try:
-        url = "https://en.wikipedia.org/wiki/List_of_S%26P_400_companies"
-        tables = pd.read_html(url)
-        df = tables[0]
-        col = 'Symbol' if 'Symbol' in df.columns else 'Ticker Symbol'
-        tickers = df[col].str.replace('.', '-', regex=False).tolist()
-        print(f"✓ S&P 400: {len(tickers)} tickers")
-        return tickers
-    except Exception as e:
-        print(f"✗ S&P 400 failed: {e}")
-        return []
-
-def get_sp600_tickers():
-    """Fetch current S&P 600 SmallCap from Wikipedia"""
-    try:
-        url = "https://en.wikipedia.org/wiki/List_of_S%26P_600_companies"
-        tables = pd.read_html(url)
-        df = tables[0]
-        col = 'Symbol' if 'Symbol' in df.columns else 'Ticker symbol'
-        tickers = df[col].str.replace('.', '-', regex=False).tolist()
-        print(f"✓ S&P 600: {len(tickers)} tickers")
-        return tickers
-    except Exception as e:
-        print(f"✗ S&P 600 failed: {e}")
-        return []
-
-def get_nasdaq100_tickers():
-    """Fetch current NASDAQ 100 from Wikipedia"""
-    try:
-        url = "https://en.wikipedia.org/wiki/Nasdaq-100"
-        tables = pd.read_html(url)
-        for table in tables:
-            if 'Ticker' in table.columns or 'Symbol' in table.columns:
-                col = 'Ticker' if 'Ticker' in table.columns else 'Symbol'
-                tickers = table[col].str.replace('.', '-', regex=False).tolist()
-                print(f"✓ NASDAQ 100: {len(tickers)} tickers")
-                return tickers
-        return []
-    except Exception as e:
-        print(f"✗ NASDAQ 100 failed: {e}")
-        return []
+# Headers to prevent blocking
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+}
 
 def get_nasdaq_traded():
     """
     Fetch ALL NASDAQ-traded stocks from official NASDAQ FTP
-    Most comprehensive source - includes 5000+ actively traded US stocks
+    PRIMARY SOURCE - Most reliable, updated daily
     """
     try:
         url = "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqtraded.txt"
-        response = requests.get(url, timeout=30)
+        response = requests.get(url, headers=HEADERS, timeout=30)
+        response.raise_for_status()
         df = pd.read_csv(StringIO(response.text), sep='|')
 
         # Filter: common stocks only, actively traded
@@ -142,7 +93,7 @@ def get_nasdaq_traded():
         # Remove warrants, units, preferred (symbols with special chars)
         df = df[~df['Symbol'].str.contains(r'[\$\^\.\+\-]', regex=True, na=False)]
 
-        # Only keep symbols 1-5 chars (excludes some weird ones)
+        # Only keep symbols 1-5 chars
         df = df[df['Symbol'].str.len() <= 5]
 
         tickers = df['Symbol'].tolist()
@@ -156,12 +107,12 @@ def get_nyse_listed():
     """Fetch NYSE-listed stocks from official NASDAQ FTP"""
     try:
         url = "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt"
-        response = requests.get(url, timeout=30)
+        response = requests.get(url, headers=HEADERS, timeout=30)
+        response.raise_for_status()
         df = pd.read_csv(StringIO(response.text), sep='|')
 
-        # Filter for NYSE stocks
+        # Filter for NYSE stocks (and AMEX/ARCA)
         df = df[
-            (df['Exchange'] == 'N') &  # NYSE
             (df['ETF'] == 'N') &
             (df['Test Issue'] == 'N') &
             (df['ACT Symbol'].notna())
@@ -172,18 +123,27 @@ def get_nyse_listed():
         df = df[df['ACT Symbol'].str.len() <= 5]
 
         tickers = df['ACT Symbol'].tolist()
-        print(f"✓ NYSE Listed: {len(tickers)} tickers")
+        print(f"✓ NYSE/Other Listed: {len(tickers)} tickers")
         return tickers
     except Exception as e:
         print(f"✗ NYSE Listed fetch failed: {e}")
         return []
 
-def get_all_tickers(full_market=True):
-    """
-    Fetch US market tickers dynamically
+def get_sp500_tickers():
+    """Fetch current S&P 500 from Wikipedia (backup)"""
+    try:
+        url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+        tables = pd.read_html(url, storage_options={'User-Agent': HEADERS['User-Agent']})
+        tickers = tables[0]['Symbol'].str.replace('.', '-', regex=False).tolist()
+        print(f"✓ S&P 500: {len(tickers)} tickers")
+        return tickers
+    except Exception as e:
+        print(f"✗ S&P 500 failed: {e}")
+        return []
 
-    full_market=True: ALL US stocks (5000+) from NASDAQ + NYSE
-    full_market=False: Just S&P indices (~1500 quality stocks)
+def get_all_tickers():
+    """
+    Fetch US market tickers - uses official NASDAQ sources (most reliable)
     """
     print("=" * 50)
     print("Fetching current US market tickers...")
@@ -191,20 +151,16 @@ def get_all_tickers(full_market=True):
 
     all_tickers = []
 
-    if full_market:
-        # Get ALL traded stocks from official sources
-        all_tickers.extend(get_nasdaq_traded())
+    # PRIMARY: Official NASDAQ sources (most reliable, no rate limits)
+    all_tickers.extend(get_nasdaq_traded())
+    time.sleep(0.5)
+    all_tickers.extend(get_nyse_listed())
+
+    # BACKUP: If NASDAQ sources fail, try Wikipedia
+    if len(all_tickers) < 100:
+        print("NASDAQ sources failed, trying Wikipedia backup...")
         time.sleep(1)
-        all_tickers.extend(get_nyse_listed())
-    else:
-        # Just S&P indices for faster scanning
         all_tickers.extend(get_sp500_tickers())
-        time.sleep(1)
-        all_tickers.extend(get_sp400_tickers())
-        time.sleep(1)
-        all_tickers.extend(get_sp600_tickers())
-        time.sleep(1)
-        all_tickers.extend(get_nasdaq100_tickers())
 
     # Deduplicate and clean
     tickers = sorted(list(set(all_tickers)))
@@ -218,22 +174,60 @@ def get_all_tickers(full_market=True):
 # Fetch tickers dynamically (replaces hardcoded list)
 TICKERS = get_all_tickers()
 
-# Fallback S&P 500 list if dynamic fetch fails
+# Fallback list if ALL dynamic fetching fails
 if len(TICKERS) < 100:
-    print("⚠️ Dynamic fetch failed, using fallback S&P 500 list...")
+    print("⚠️ Dynamic fetch failed, using fallback list (~500 stocks)...")
     TICKERS = [
-        'AAPL', 'ABBV', 'ABT', 'ACN', 'ADBE', 'ADP', 'AMAT', 'AMD', 'AMGN', 'AMZN',
-        'AVGO', 'AXP', 'BA', 'BAC', 'BK', 'BKNG', 'BLK', 'BMY', 'BRK-B', 'C',
-        'CAT', 'CHTR', 'CL', 'CMCSA', 'COF', 'COP', 'COST', 'CRM', 'CSCO', 'CVS',
-        'CVX', 'DE', 'DHR', 'DIS', 'DOW', 'DUK', 'EMR', 'EXC', 'F', 'FDX',
-        'GD', 'GE', 'GILD', 'GM', 'GOOG', 'GOOGL', 'GS', 'HD', 'HON', 'IBM',
-        'INTC', 'INTU', 'ISRG', 'JNJ', 'JPM', 'KO', 'LIN', 'LLY', 'LMT', 'LOW',
-        'MA', 'MCD', 'MDLZ', 'MDT', 'MET', 'META', 'MMM', 'MO', 'MRK', 'MS',
-        'MSFT', 'NEE', 'NFLX', 'NKE', 'NOW', 'NVDA', 'ORCL', 'PEP', 'PFE', 'PG',
-        'PM', 'PYPL', 'QCOM', 'RTX', 'SBUX', 'SCHW', 'SO', 'SPG', 'T', 'TGT',
-        'TMO', 'TMUS', 'TSLA', 'TXN', 'UNH', 'UNP', 'UPS', 'USB', 'V', 'VZ',
-        'WFC', 'WMT', 'XOM',
+        # S&P 500 Large Cap
+        'AAPL', 'ABBV', 'ABT', 'ACN', 'ADBE', 'ADI', 'ADP', 'ADSK', 'AEP', 'AFL',
+        'AIG', 'AMAT', 'AMD', 'AMGN', 'AMZN', 'ANET', 'AON', 'APD', 'APH', 'AVGO',
+        'AXP', 'AZO', 'BA', 'BAC', 'BDX', 'BIIB', 'BK', 'BKNG', 'BLK', 'BMY',
+        'BRK-B', 'BSX', 'C', 'CAT', 'CB', 'CDNS', 'CEG', 'CHTR', 'CI', 'CL',
+        'CMCSA', 'CME', 'CMG', 'COF', 'COP', 'COST', 'CRM', 'CSCO', 'CSX', 'CTAS',
+        'CVS', 'CVX', 'D', 'DD', 'DE', 'DHI', 'DHR', 'DIS', 'DLR', 'DOW',
+        'DUK', 'DVN', 'DXCM', 'EA', 'EBAY', 'ECL', 'EL', 'EMR', 'ENPH', 'EOG',
+        'EQIX', 'EW', 'EXC', 'F', 'FANG', 'FAST', 'FCX', 'FDX', 'FI', 'FICO',
+        'FISV', 'FTNT', 'GD', 'GE', 'GEHC', 'GILD', 'GIS', 'GLW', 'GM', 'GOOG',
+        'GOOGL', 'GPN', 'GS', 'GWW', 'HAL', 'HD', 'HES', 'HLT', 'HON', 'HPQ',
+        'HSY', 'HUM', 'IBM', 'ICE', 'IDXX', 'INTC', 'INTU', 'ISRG', 'ITW', 'JCI',
+        'JBHT', 'JNJ', 'JPM', 'KDP', 'KEY', 'KHC', 'KLAC', 'KMB', 'KO', 'KR',
+        'LRCX', 'LEN', 'LIN', 'LLY', 'LMT', 'LOW', 'LULU', 'LVS', 'LYB', 'MA',
+        'MAR', 'MCD', 'MCHP', 'MCK', 'MCO', 'MDLZ', 'MDT', 'MET', 'META', 'MGM',
+        'MMC', 'MMM', 'MNST', 'MO', 'MPC', 'MRK', 'MRNA', 'MS', 'MSCI', 'MSFT',
+        'MSI', 'MTB', 'MU', 'NDAQ', 'NEE', 'NEM', 'NFLX', 'NKE', 'NOC', 'NOW',
+        'NSC', 'NTAP', 'NVDA', 'NVR', 'NXPI', 'O', 'ODFL', 'OKE', 'OMC', 'ON',
+        'ORCL', 'ORLY', 'OXY', 'PANW', 'PAYX', 'PCAR', 'PEG', 'PEP', 'PFE', 'PG',
+        'PGR', 'PH', 'PHM', 'PLD', 'PM', 'PNC', 'PPG', 'PRU', 'PSA', 'PSX',
+        'PXD', 'PYPL', 'QCOM', 'RCL', 'REGN', 'RF', 'RJF', 'ROK', 'ROP', 'ROST',
+        'RSG', 'RTX', 'SBUX', 'SCHW', 'SHW', 'SLB', 'SNPS', 'SO', 'SPG', 'SPGI',
+        'SRE', 'STT', 'STZ', 'SYF', 'SYK', 'SYY', 'T', 'TDG', 'TEL', 'TFC',
+        'TGT', 'TJX', 'TMO', 'TMUS', 'TRGP', 'TROW', 'TRV', 'TSCO', 'TSLA', 'TSN',
+        'TT', 'TTWO', 'TXN', 'TYL', 'UAL', 'UNH', 'UNP', 'UPS', 'URI', 'USB',
+        'V', 'VICI', 'VLO', 'VMC', 'VRSK', 'VRTX', 'VZ', 'WBA', 'WBD', 'WELL',
+        'WFC', 'WM', 'WMB', 'WMT', 'WRB', 'WST', 'XEL', 'XOM', 'XYL', 'YUM',
+        'ZBH', 'ZBRA', 'ZTS',
+        # Mid Cap Growth
+        'ABNB', 'AXON', 'BILL', 'BLDR', 'CPRT', 'CRWD', 'DASH', 'DDOG', 'DECK',
+        'DOCU', 'ENSG', 'EXAS', 'EXP', 'FND', 'GDDY', 'GNRC', 'HUBS', 'INSP',
+        'LNTH', 'MANH', 'MEDP', 'MDB', 'MPWR', 'MSTR', 'MUSA', 'NET', 'NTRA',
+        'OLED', 'ONTO', 'PCTY', 'PLTR', 'PODD', 'POOL', 'PSTG', 'RH', 'SAIA',
+        'SMCI', 'SNOW', 'SQ', 'TECH', 'TER', 'TOST', 'TPL', 'TREX', 'TTD', 'TW',
+        'UBER', 'ULTA', 'VEEV', 'WIX', 'ZS',
+        # Energy & Materials
+        'ALB', 'APA', 'AR', 'BKR', 'CF', 'CLF', 'CNX', 'CTRA', 'DVN', 'EQT',
+        'FANG', 'HAL', 'HES', 'KMI', 'MOS', 'MPC', 'MRO', 'NOV', 'NUE', 'OKE',
+        'OVV', 'OXY', 'RRC', 'SCCO', 'SLB', 'STLD', 'TRGP', 'VLO', 'WMB', 'XOM',
+        # Financials
+        'ACGL', 'AFL', 'AIG', 'ALL', 'ALLY', 'AON', 'AXP', 'BAC', 'BK', 'BLK',
+        'BRO', 'C', 'CB', 'CINF', 'CMA', 'COF', 'DFS', 'FITB', 'GS', 'HBAN',
+        'HIG', 'IBKR', 'ICE', 'JPM', 'KEY', 'L', 'MET', 'MMC', 'MS', 'MTB',
+        'NTRS', 'PFG', 'PGR', 'PNC', 'PRU', 'RF', 'RJF', 'SCHW', 'STT', 'SYF',
+        'TFC', 'TROW', 'TRV', 'USB', 'WFC', 'WRB', 'ZION',
+        # REITs
+        'AMT', 'ARE', 'AVB', 'CCI', 'DLR', 'EQIX', 'EQR', 'ESS', 'EXR', 'INVH',
+        'IRM', 'MAA', 'O', 'PLD', 'PSA', 'SBAC', 'SPG', 'UDR', 'VICI', 'WELL',
     ]
+    TICKERS = sorted(list(set(TICKERS)))
     print(f"Fallback tickers: {len(TICKERS)}")
 
 # =============================================================================
