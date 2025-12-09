@@ -124,26 +124,80 @@ VIX_CONFIGS = [
 ]
 
 # =============================================================================
-# TICKERS
+# TICKERS - Dynamic fetching from official sources
 # =============================================================================
-TICKERS = [
-    'AAPL', 'ABBV', 'ABT', 'ACN', 'ADBE', 'AIG', 'ALL', 'AMAT', 'AMD', 'AMGN',
-    'AMZN', 'ANET', 'AON', 'AXP', 'BA', 'BAC', 'BK', 'BKNG', 'BLK', 'BMY',
-    'BRK-B', 'C', 'CAT', 'CHTR', 'CI', 'CL', 'CMCSA', 'COF', 'COP', 'COST',
-    'CRM', 'CSCO', 'CVS', 'CVX', 'D', 'DE', 'DHI', 'DHR', 'DIS', 'DOW',
-    'DUK', 'EMR', 'EOG', 'EXC', 'F', 'FCX', 'FDX', 'GD', 'GE', 'GILD',
-    'GM', 'GOOG', 'GS', 'HD', 'HON', 'IBM', 'INTC', 'ISRG', 'JNJ', 'JPM',
-    'KO', 'LEN', 'LIN', 'LLY', 'LMT', 'LOW', 'MA', 'MCD', 'MDLZ', 'MDT',
-    'MET', 'META', 'MMM', 'MO', 'MPC', 'MRK', 'MS', 'MSFT', 'NEE', 'NFLX',
-    'NKE', 'NVDA', 'ORCL', 'OXY', 'PEP', 'PFE', 'PG', 'PM', 'PYPL', 'QCOM',
-    'RTX', 'SBUX', 'SCHW', 'SLB', 'SO', 'SPG', 'T', 'TGT', 'TMO', 'TSLA',
-    'TXN', 'UNH', 'UNP', 'UPS', 'USB', 'V', 'VLO', 'VZ', 'WFC', 'WMT', 'XOM',
-    'ALLY', 'BHF', 'CF', 'CLF', 'DKS', 'EAT', 'GL', 'HRI', 'JBL', 'KBH',
-    'LAD', 'MHO', 'MTH', 'ORI', 'RH', 'RS', 'SAIA', 'TOL', 'TPH', 'URBN',
-]
+import requests
+from io import StringIO
 
-TICKERS = sorted(list(set(TICKERS)))
-print(f"Total tickers: {len(TICKERS)}")
+HEADERS = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+}
+
+# 'fast'   = ~500 stocks  (~5-8 min per config)
+# 'medium' = ~900 stocks  (~10-15 min per config)
+SCAN_MODE = 'medium'
+
+def get_sp500_tickers():
+    try:
+        url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+        tables = pd.read_html(url, storage_options={'User-Agent': HEADERS['User-Agent']})
+        tickers = tables[0]['Symbol'].str.replace('.', '-', regex=False).tolist()
+        print(f"✓ S&P 500: {len(tickers)} tickers")
+        return tickers
+    except Exception as e:
+        print(f"✗ S&P 500 failed: {e}")
+        return []
+
+def get_sp400_tickers():
+    try:
+        url = "https://en.wikipedia.org/wiki/List_of_S%26P_400_companies"
+        tables = pd.read_html(url, storage_options={'User-Agent': HEADERS['User-Agent']})
+        df = tables[0]
+        col = 'Symbol' if 'Symbol' in df.columns else 'Ticker Symbol'
+        tickers = df[col].str.replace('.', '-', regex=False).tolist()
+        print(f"✓ S&P 400: {len(tickers)} tickers")
+        return tickers
+    except Exception as e:
+        print(f"✗ S&P 400 failed: {e}")
+        return []
+
+def get_all_tickers(mode='medium'):
+    print("=" * 50)
+    print(f"Fetching tickers (mode: {mode})...")
+    print("=" * 50)
+    all_tickers = []
+    if mode == 'fast':
+        all_tickers.extend(get_sp500_tickers())
+    else:  # medium
+        all_tickers.extend(get_sp500_tickers())
+        time.sleep(0.5)
+        all_tickers.extend(get_sp400_tickers())
+    tickers = sorted(list(set(all_tickers)))
+    tickers = [t for t in tickers if t and isinstance(t, str) and 1 <= len(t) <= 5]
+    print(f"Total tickers: {len(tickers)}")
+    print("=" * 50)
+    return tickers
+
+TICKERS = get_all_tickers(SCAN_MODE)
+
+# Fallback if fetching fails
+if len(TICKERS) < 100:
+    print("⚠️ Fetch failed, using fallback list...")
+    TICKERS = [
+        'AAPL', 'ABBV', 'ABT', 'ACN', 'ADBE', 'AIG', 'ALL', 'AMAT', 'AMD', 'AMGN',
+        'AMZN', 'ANET', 'AON', 'AXP', 'BA', 'BAC', 'BK', 'BKNG', 'BLK', 'BMY',
+        'BRK-B', 'C', 'CAT', 'CHTR', 'CI', 'CL', 'CMCSA', 'COF', 'COP', 'COST',
+        'CRM', 'CSCO', 'CVS', 'CVX', 'D', 'DE', 'DHI', 'DHR', 'DIS', 'DOW',
+        'DUK', 'EMR', 'EOG', 'EXC', 'F', 'FCX', 'FDX', 'GD', 'GE', 'GILD',
+        'GM', 'GOOG', 'GS', 'HD', 'HON', 'IBM', 'INTC', 'ISRG', 'JNJ', 'JPM',
+        'KO', 'LEN', 'LIN', 'LLY', 'LMT', 'LOW', 'MA', 'MCD', 'MDLZ', 'MDT',
+        'MET', 'META', 'MMM', 'MO', 'MPC', 'MRK', 'MS', 'MSFT', 'NEE', 'NFLX',
+        'NKE', 'NVDA', 'ORCL', 'OXY', 'PEP', 'PFE', 'PG', 'PM', 'PYPL', 'QCOM',
+        'RTX', 'SBUX', 'SCHW', 'SLB', 'SO', 'SPG', 'T', 'TGT', 'TMO', 'TSLA',
+        'TXN', 'UNH', 'UNP', 'UPS', 'USB', 'V', 'VLO', 'VZ', 'WFC', 'WMT', 'XOM',
+    ]
+    TICKERS = sorted(list(set(TICKERS)))
+    print(f"Fallback tickers: {len(TICKERS)}")
 
 # =============================================================================
 # INDICATORS
