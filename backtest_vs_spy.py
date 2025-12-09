@@ -27,7 +27,7 @@ MAX_HOLD_DAYS = 120
 
 USE_VIX_FILTER = True
 VIX_MIN = 20
-VIX_MAX = 50
+VIX_MAX = 35  # Optimized: blocks extreme panic (35-50) for better crash protection
 
 USE_VOLUME_FILTER = True
 VOLUME_SURGE_MULT = 1.2
