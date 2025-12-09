@@ -60,166 +60,181 @@ MIN_ROE = 8.0
 MAX_DEBT_EQUITY = 2.0
 
 # =============================================================================
-# FULL US MARKET TICKERS (~1200 stocks)
+# DYNAMIC TICKER FETCHING - Always gets current market constituents
 # =============================================================================
-TICKERS = [
-    # S&P 500
-    'A', 'AAL', 'AAP', 'AAPL', 'ABBV', 'ABC', 'ABMD', 'ABT', 'ACGL', 'ACN',
-    'ADBE', 'ADI', 'ADM', 'ADP', 'ADSK', 'AEE', 'AEP', 'AES', 'AFL', 'AIG',
-    'AIZ', 'AJG', 'AKAM', 'ALB', 'ALGN', 'ALK', 'ALL', 'ALLE', 'AMAT', 'AMCR',
-    'AMD', 'AME', 'AMGN', 'AMP', 'AMT', 'AMZN', 'ANET', 'ANSS', 'AON', 'AOS',
-    'APA', 'APD', 'APH', 'APTV', 'ARE', 'ATO', 'AVB', 'AVGO', 'AVY', 'AWK',
-    'AXP', 'AZO', 'BA', 'BAC', 'BALL', 'BAX', 'BBWI', 'BBY', 'BDX', 'BEN',
-    'BG', 'BIIB', 'BIO', 'BK', 'BKNG', 'BKR', 'BLK', 'BMY', 'BR', 'BRK-B',
-    'BRO', 'BSX', 'BWA', 'BXP', 'C', 'CAG', 'CAH', 'CARR', 'CAT', 'CB',
-    'CBOE', 'CBRE', 'CCI', 'CCL', 'CDAY', 'CDNS', 'CDW', 'CE', 'CEG', 'CF',
-    'CFG', 'CHD', 'CHRW', 'CHTR', 'CI', 'CINF', 'CL', 'CLX', 'CMA', 'CMCSA',
-    'CME', 'CMG', 'CMI', 'CMS', 'CNC', 'CNP', 'COF', 'COO', 'COP', 'COST',
-    'CPB', 'CPRT', 'CPT', 'CRL', 'CRM', 'CSCO', 'CSGP', 'CSX', 'CTAS', 'CTLT',
-    'CTRA', 'CTSH', 'CTVA', 'CVS', 'CVX', 'CZR', 'D', 'DAL', 'DD', 'DE',
-    'DFS', 'DG', 'DGX', 'DHI', 'DHR', 'DIS', 'DLR', 'DLTR', 'DOV', 'DOW',
-    'DPZ', 'DRI', 'DTE', 'DUK', 'DVA', 'DVN', 'DXC', 'DXCM', 'EA', 'EBAY',
-    'ECL', 'ED', 'EFX', 'EIX', 'EL', 'ELV', 'EMN', 'EMR', 'ENPH', 'EOG',
-    'EPAM', 'EQIX', 'EQR', 'EQT', 'ES', 'ESS', 'ETN', 'ETR', 'ETSY', 'EVRG',
-    'EW', 'EXC', 'EXPD', 'EXPE', 'EXR', 'F', 'FANG', 'FAST', 'FBHS', 'FCX',
-    'FDS', 'FDX', 'FE', 'FFIV', 'FI', 'FICO', 'FIS', 'FISV', 'FITB', 'FLT',
-    'FMC', 'FOX', 'FOXA', 'FRT', 'FSLR', 'FTNT', 'FTV', 'GD', 'GE', 'GEHC',
-    'GEN', 'GILD', 'GIS', 'GL', 'GLW', 'GM', 'GNRC', 'GOOG', 'GOOGL', 'GPC',
-    'GPN', 'GRMN', 'GS', 'GWW', 'HAL', 'HAS', 'HBAN', 'HCA', 'HD', 'HES',
-    'HIG', 'HII', 'HLT', 'HOLX', 'HON', 'HPE', 'HPQ', 'HRL', 'HSIC', 'HST',
-    'HSY', 'HUBB', 'HUM', 'HWM', 'IBM', 'ICE', 'IDXX', 'IEX', 'IFF', 'ILMN',
-    'INCY', 'INTC', 'INTU', 'INVH', 'IP', 'IPG', 'IQV', 'IR', 'IRM', 'ISRG',
-    'IT', 'ITW', 'IVZ', 'J', 'JBHT', 'JCI', 'JKHY', 'JNJ', 'JNPR', 'JPM',
-    'K', 'KDP', 'KEY', 'KEYS', 'KHC', 'KIM', 'KLAC', 'KMB', 'KMI', 'KMX',
-    'KO', 'KR', 'KVUE', 'L', 'LDOS', 'LEN', 'LH', 'LHX', 'LIN', 'LKQ', 'LLY',
-    'LMT', 'LNC', 'LNT', 'LOW', 'LRCX', 'LULU', 'LUV', 'LVS', 'LW', 'LYB',
-    'LYV', 'MA', 'MAA', 'MAR', 'MAS', 'MCD', 'MCHP', 'MCK', 'MCO', 'MDLZ',
-    'MDT', 'MET', 'META', 'MGM', 'MHK', 'MKC', 'MKTX', 'MLM', 'MMC', 'MMM',
-    'MNST', 'MO', 'MOH', 'MOS', 'MPC', 'MPWR', 'MRK', 'MRNA', 'MRO', 'MS',
-    'MSCI', 'MSFT', 'MSI', 'MTB', 'MTCH', 'MTD', 'MU', 'NCLH', 'NDAQ', 'NDSN',
-    'NEE', 'NEM', 'NFLX', 'NI', 'NKE', 'NOC', 'NOW', 'NRG', 'NSC', 'NTAP',
-    'NTRS', 'NUE', 'NVDA', 'NVR', 'NWL', 'NWS', 'NWSA', 'NXPI', 'O', 'ODFL',
-    'OGN', 'OKE', 'OMC', 'ON', 'ORCL', 'ORLY', 'OTIS', 'OXY', 'PANW', 'PARA',
-    'PAYC', 'PAYX', 'PCAR', 'PCG', 'PEAK', 'PEG', 'PEP', 'PFE', 'PFG', 'PG',
-    'PGR', 'PH', 'PHM', 'PKG', 'PKI', 'PLD', 'PM', 'PNC', 'PNR', 'PNW',
-    'POOL', 'PPG', 'PPL', 'PRU', 'PSA', 'PSX', 'PTC', 'PVH', 'PWR', 'PXD',
-    'PYPL', 'QCOM', 'QRVO', 'RCL', 'RE', 'REG', 'REGN', 'RF', 'RHI', 'RJF',
-    'RL', 'RMD', 'ROK', 'ROL', 'ROP', 'ROST', 'RSG', 'RTX', 'RVTY', 'SBAC',
-    'SBUX', 'SCHW', 'SEDG', 'SEE', 'SHW', 'SJM', 'SLB', 'SNA', 'SNPS', 'SO',
-    'SPG', 'SPGI', 'SRE', 'STE', 'STLD', 'STT', 'STX', 'STZ', 'SWK', 'SWKS',
-    'SYF', 'SYK', 'SYY', 'T', 'TAP', 'TDG', 'TDY', 'TECH', 'TEL', 'TER',
-    'TFC', 'TFX', 'TGT', 'TJX', 'TMO', 'TMUS', 'TPR', 'TRGP', 'TRMB', 'TROW',
-    'TRV', 'TSCO', 'TSLA', 'TSN', 'TT', 'TTWO', 'TXN', 'TXT', 'TYL', 'UAL',
-    'UDR', 'UHS', 'ULTA', 'UNH', 'UNP', 'UPS', 'URI', 'USB', 'V', 'VFC',
-    'VICI', 'VLO', 'VMC', 'VNO', 'VRSK', 'VRSN', 'VRTX', 'VTR', 'VTRS', 'VZ',
-    'WAB', 'WAT', 'WBA', 'WBD', 'WDC', 'WEC', 'WELL', 'WFC', 'WHR', 'WM',
-    'WMB', 'WMT', 'WRB', 'WRK', 'WST', 'WTW', 'WY', 'WYNN', 'XEL', 'XOM',
-    'XRAY', 'XYL', 'YUM', 'ZBH', 'ZBRA', 'ZION', 'ZTS',
+import requests
+from io import StringIO
 
-    # S&P 400 MidCap
-    'ACIW', 'ACM', 'AEO', 'AFG', 'AGCO', 'AIT', 'ALKS', 'ALLY', 'AMKR', 'AMN',
-    'AN', 'ANF', 'AR', 'ARCB', 'ARW', 'ASB', 'ASH', 'ASGN', 'ATI', 'ATR',
-    'AYI', 'BC', 'BCO', 'BDC', 'BERY', 'BHF', 'BJ', 'BLD', 'BOOT', 'BRKR',
-    'BTU', 'BWXT', 'BYD', 'CAL', 'CALM', 'CASY', 'CBT', 'CC', 'CEIX', 'CHE',
-    'CHDN', 'CHK', 'CHRD', 'CIEN', 'CLF', 'CLH', 'CMC', 'CNK', 'CNO', 'COHR',
-    'COLM', 'CPE', 'CRC', 'CRK', 'CRUS', 'CUZ', 'CW', 'DAR', 'DCI', 'DDS',
-    'DECK', 'DEI', 'DKS', 'DLB', 'DY', 'EAT', 'EGP', 'EHC', 'ELAN', 'ELF',
-    'ELS', 'ENSG', 'EPR', 'EQH', 'ESNT', 'EVR', 'EXEL', 'EXLS', 'EXP', 'FAF',
-    'FCFS', 'FHN', 'FIVE', 'FIX', 'FL', 'FLO', 'FLS', 'FND', 'FOXF', 'FR',
-    'G', 'GBX', 'GDDY', 'GEF', 'GGG', 'GNTX', 'GO', 'GTES', 'GVA', 'GWRE',
-    'GXO', 'H', 'HAE', 'HALO', 'HBI', 'HEI', 'HGV', 'HI', 'HNI', 'HP', 'HQY',
-    'HRB', 'HRI', 'HUN', 'HWC', 'HXL', 'IAC', 'IART', 'IBKR', 'ICFI', 'IDCC',
-    'IGT', 'INSP', 'IPGP', 'IRT', 'ITT', 'JBL', 'JEF', 'JLL', 'KBH', 'KBR',
-    'KEX', 'KMT', 'KNX', 'KRC', 'LAD', 'LANC', 'LEA', 'LFUS', 'LII', 'LITE',
-    'LNTH', 'LPX', 'MANH', 'MAN', 'MASI', 'MAT', 'MATX', 'MEDP', 'MHO', 'MIDD',
-    'MKSI', 'MLI', 'MMS', 'MOD', 'MORN', 'MPW', 'MRCY', 'MSA', 'MSM', 'MSTR',
-    'MTG', 'MTH', 'MTN', 'MTSI', 'MUR', 'MUSA', 'NBIX', 'NFG', 'NHI', 'NMIH',
-    'NNN', 'NOG', 'NOV', 'NVT', 'NYCB', 'NYT', 'OC', 'OGE', 'OHI', 'OLED',
-    'OLN', 'OMF', 'ONB', 'ONTO', 'ORI', 'OSK', 'OVV', 'PAG', 'PBH', 'PEB',
-    'PEGA', 'PEN', 'PFGC', 'PII', 'PIPR', 'PLNT', 'POR', 'POST', 'POWI', 'POWL',
-    'PRGO', 'PRI', 'PSTG', 'QLYS', 'R', 'RBC', 'REXR', 'RGA', 'RGEN', 'RGLD',
-    'RH', 'RHP', 'RMBS', 'RNG', 'RNR', 'RPM', 'RS', 'SAIA', 'SANM', 'SBRA',
-    'SCCO', 'SEIC', 'SF', 'SFM', 'SHAK', 'SIG', 'SKX', 'SKY', 'SLM', 'SM',
-    'SMCI', 'SMG', 'SNDR', 'SNV', 'SNX', 'SON', 'SPR', 'SPXC', 'SSB', 'SSNC',
-    'ST', 'STAG', 'STRL', 'STWD', 'THC', 'THO', 'TNET', 'TOL', 'TPH', 'TREX',
-    'TRU', 'TTEC', 'TTC', 'UFPI', 'UGI', 'UNFI', 'UNF', 'UNM', 'URBN', 'UTHR',
-    'VAC', 'VCEL', 'VIAV', 'VIRT', 'VOYA', 'VSCO', 'VVV', 'WAL', 'WBS', 'WEN',
-    'WEX', 'WGO', 'WH', 'WHD', 'WING', 'WLK', 'WMS', 'WOR', 'WSC', 'WSO',
-    'WTFC', 'X', 'XPO', 'YETI',
+def get_sp500_tickers():
+    """Fetch current S&P 500 from Wikipedia"""
+    try:
+        url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+        tables = pd.read_html(url)
+        tickers = tables[0]['Symbol'].str.replace('.', '-', regex=False).tolist()
+        print(f"✓ S&P 500: {len(tickers)} tickers")
+        return tickers
+    except Exception as e:
+        print(f"✗ S&P 500 failed: {e}")
+        return []
 
-    # Growth / Tech
-    'ABNB', 'AFRM', 'AI', 'BILL', 'COIN', 'CRWD', 'DDOG', 'DOCU', 'ESTC',
-    'FTNT', 'GLOB', 'GTLB', 'HOOD', 'HUBS', 'MDB', 'MNDY', 'NET', 'NTNX',
-    'OKTA', 'PCTY', 'PINS', 'PLTR', 'RBLX', 'RIOT', 'ROKU', 'SHOP', 'SNAP',
-    'SNOW', 'SOFI', 'SPOT', 'SQ', 'TTD', 'TWLO', 'U', 'UBER', 'UPST', 'VEEV',
-    'WIX', 'ZI', 'ZM', 'ZS',
+def get_sp400_tickers():
+    """Fetch current S&P 400 MidCap from Wikipedia"""
+    try:
+        url = "https://en.wikipedia.org/wiki/List_of_S%26P_400_companies"
+        tables = pd.read_html(url)
+        df = tables[0]
+        col = 'Symbol' if 'Symbol' in df.columns else 'Ticker Symbol'
+        tickers = df[col].str.replace('.', '-', regex=False).tolist()
+        print(f"✓ S&P 400: {len(tickers)} tickers")
+        return tickers
+    except Exception as e:
+        print(f"✗ S&P 400 failed: {e}")
+        return []
 
-    # Biotech
-    'ALNY', 'ARGX', 'BGNE', 'BNTX', 'CRSP', 'EXAS', 'INCY', 'IONS', 'JAZZ',
-    'LEGN', 'MDGL', 'NBIX', 'RARE', 'REGN', 'RPRX', 'SRPT', 'UTHR', 'VKTX',
+def get_sp600_tickers():
+    """Fetch current S&P 600 SmallCap from Wikipedia"""
+    try:
+        url = "https://en.wikipedia.org/wiki/List_of_S%26P_600_companies"
+        tables = pd.read_html(url)
+        df = tables[0]
+        col = 'Symbol' if 'Symbol' in df.columns else 'Ticker symbol'
+        tickers = df[col].str.replace('.', '-', regex=False).tolist()
+        print(f"✓ S&P 600: {len(tickers)} tickers")
+        return tickers
+    except Exception as e:
+        print(f"✗ S&P 600 failed: {e}")
+        return []
 
-    # Energy
-    'APA', 'AR', 'BKR', 'CHK', 'CHRD', 'CNX', 'CTRA', 'DVN', 'EOG', 'EQT',
-    'FANG', 'HAL', 'HES', 'KMI', 'MPC', 'MRO', 'MTDR', 'MUR', 'NOV', 'OKE',
-    'OVV', 'OXY', 'PXD', 'RRC', 'SLB', 'SM', 'SWN', 'TRGP', 'VLO', 'WMB', 'XOM',
+def get_nasdaq100_tickers():
+    """Fetch current NASDAQ 100 from Wikipedia"""
+    try:
+        url = "https://en.wikipedia.org/wiki/Nasdaq-100"
+        tables = pd.read_html(url)
+        for table in tables:
+            if 'Ticker' in table.columns or 'Symbol' in table.columns:
+                col = 'Ticker' if 'Ticker' in table.columns else 'Symbol'
+                tickers = table[col].str.replace('.', '-', regex=False).tolist()
+                print(f"✓ NASDAQ 100: {len(tickers)} tickers")
+                return tickers
+        return []
+    except Exception as e:
+        print(f"✗ NASDAQ 100 failed: {e}")
+        return []
 
-    # Financials
-    'ACGL', 'AFG', 'AIG', 'AJG', 'ALL', 'ALLY', 'AON', 'APO', 'AXP', 'AXS',
-    'BAC', 'BK', 'BLK', 'BRO', 'BX', 'C', 'CB', 'CFG', 'CINF', 'CMA', 'COF',
-    'DFS', 'ERIE', 'EVR', 'FITB', 'FNB', 'GS', 'HBAN', 'HIG', 'IBKR', 'ICE',
-    'JPM', 'KEY', 'KKR', 'L', 'LPLA', 'MET', 'MMC', 'MS', 'MTB', 'MTG',
-    'NDAQ', 'NMIH', 'NTRS', 'ORI', 'PFG', 'PGR', 'PIPR', 'PNC', 'PRU', 'RDN',
-    'RF', 'RGA', 'RJF', 'RNR', 'SCHW', 'SEIC', 'SF', 'SLM', 'SOFI', 'STT',
-    'SYF', 'TFC', 'TROW', 'TRV', 'UNM', 'USB', 'VOYA', 'WAL', 'WBS', 'WFC',
-    'WRB', 'ZION',
+def get_nasdaq_traded():
+    """
+    Fetch ALL NASDAQ-traded stocks from official NASDAQ FTP
+    Most comprehensive source - includes 5000+ actively traded US stocks
+    """
+    try:
+        url = "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqtraded.txt"
+        response = requests.get(url, timeout=30)
+        df = pd.read_csv(StringIO(response.text), sep='|')
 
-    # Industrials
-    'AGCO', 'AXON', 'BAH', 'BLDR', 'CAT', 'CMI', 'DE', 'EME', 'EMR', 'ETN',
-    'FAST', 'FDX', 'FTV', 'GE', 'GNRC', 'GWW', 'HEI', 'HON', 'HWM', 'IEX',
-    'IR', 'ITT', 'ITW', 'J', 'JBHT', 'JBL', 'JCI', 'KBR', 'LDOS', 'LMT',
-    'MAS', 'MLI', 'MMM', 'MOD', 'NDSN', 'NOC', 'ODFL', 'OSK', 'OTIS', 'PCAR',
-    'PH', 'PNR', 'PWR', 'RBC', 'ROK', 'ROL', 'ROP', 'RSG', 'RTX', 'SAIA',
-    'SNA', 'STRL', 'SWK', 'TDG', 'TDY', 'TT', 'TTC', 'TXT', 'UFPI', 'UNP',
-    'UPS', 'URI', 'WAB', 'WCC', 'WM', 'XPO', 'XYL',
+        # Filter: common stocks only, actively traded
+        df = df[
+            (df['ETF'] == 'N') &
+            (df['Test Issue'] == 'N') &
+            (df['NextShares'] == 'N') &
+            (df['Symbol'].notna())
+        ]
 
-    # Consumer
-    'AMZN', 'ANF', 'AZO', 'BBY', 'BKNG', 'BURL', 'CCL', 'CHWY', 'CMG', 'COST',
-    'CPRI', 'CROX', 'CVNA', 'DASH', 'DG', 'DHI', 'DKS', 'DLTR', 'DPZ', 'DRI',
-    'ETSY', 'EXPE', 'F', 'FIVE', 'FND', 'GM', 'GPS', 'GPC', 'HAS', 'HD',
-    'HLT', 'KMX', 'KR', 'LEN', 'LOW', 'LULU', 'LVS', 'LYFT', 'M', 'MAR',
-    'MAT', 'MCD', 'MGM', 'NCLH', 'NKE', 'NVR', 'OLLI', 'ORLY', 'PHM', 'POOL',
-    'PTON', 'RCL', 'RH', 'RL', 'ROST', 'SBUX', 'SHAK', 'SKX', 'TGT', 'TJX',
-    'TOL', 'TPR', 'TRIP', 'TSCO', 'TSLA', 'UA', 'UBER', 'ULTA', 'URBN', 'VFC',
-    'W', 'WHR', 'WING', 'WMT', 'WSM', 'WYNN', 'YUM',
+        # Remove warrants, units, preferred (symbols with special chars)
+        df = df[~df['Symbol'].str.contains(r'[\$\^\.\+\-]', regex=True, na=False)]
 
-    # Materials
-    'AA', 'ALB', 'BALL', 'CCJ', 'CE', 'CF', 'CLF', 'DOW', 'EMN', 'FCX',
-    'FMC', 'GOLD', 'IFF', 'IP', 'LIN', 'LYB', 'MLM', 'MOS', 'MP', 'NEM',
-    'NTR', 'NUE', 'OLN', 'PKG', 'PPG', 'RGLD', 'RS', 'SCCO', 'SHW', 'SMG',
-    'SON', 'STLD', 'TECK', 'VALE', 'VMC', 'WPM', 'WRK',
+        # Only keep symbols 1-5 chars (excludes some weird ones)
+        df = df[df['Symbol'].str.len() <= 5]
 
-    # REITs
-    'ACC', 'AMT', 'ARE', 'AVB', 'CCI', 'CPT', 'CUBE', 'DLR', 'EGP', 'EQIX',
-    'EQR', 'ESS', 'EXR', 'FR', 'FRT', 'GLPI', 'HST', 'INVH', 'IRM', 'IRT',
-    'KIM', 'KRC', 'MAA', 'MPW', 'NNN', 'O', 'OHI', 'PEB', 'PLD', 'PSA',
-    'REG', 'REXR', 'SBAC', 'SLG', 'SPG', 'STAG', 'UDR', 'VICI', 'VNO', 'VTR',
-    'WELL', 'WPC',
+        tickers = df['Symbol'].tolist()
+        print(f"✓ NASDAQ Traded: {len(tickers)} tickers")
+        return tickers
+    except Exception as e:
+        print(f"✗ NASDAQ Traded fetch failed: {e}")
+        return []
 
-    # Utilities
-    'AEE', 'AEP', 'AES', 'ATO', 'AWK', 'CMS', 'CNP', 'D', 'DTE', 'DUK',
-    'ED', 'EIX', 'ES', 'ETR', 'EVRG', 'EXC', 'FE', 'LNT', 'NEE', 'NI',
-    'NRG', 'PCG', 'PEG', 'PNW', 'PPL', 'SO', 'SRE', 'VST', 'WEC', 'XEL',
+def get_nyse_listed():
+    """Fetch NYSE-listed stocks from official NASDAQ FTP"""
+    try:
+        url = "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt"
+        response = requests.get(url, timeout=30)
+        df = pd.read_csv(StringIO(response.text), sep='|')
 
-    # Clean Energy / EV
-    'CHPT', 'ENPH', 'FSLR', 'LAC', 'LCID', 'LI', 'NIO', 'PLUG', 'QS', 'RIVN',
-    'RUN', 'SEDG', 'XPEV',
+        # Filter for NYSE stocks
+        df = df[
+            (df['Exchange'] == 'N') &  # NYSE
+            (df['ETF'] == 'N') &
+            (df['Test Issue'] == 'N') &
+            (df['ACT Symbol'].notna())
+        ]
 
-    # Crypto
-    'COIN', 'MARA', 'MSTR', 'RIOT',
-]
+        # Clean symbols
+        df = df[~df['ACT Symbol'].str.contains(r'[\$\^\.\+]', regex=True, na=False)]
+        df = df[df['ACT Symbol'].str.len() <= 5]
 
-TICKERS = sorted(list(set(TICKERS)))
-print(f"Total tickers: {len(TICKERS)}")
+        tickers = df['ACT Symbol'].tolist()
+        print(f"✓ NYSE Listed: {len(tickers)} tickers")
+        return tickers
+    except Exception as e:
+        print(f"✗ NYSE Listed fetch failed: {e}")
+        return []
+
+def get_all_tickers(full_market=True):
+    """
+    Fetch US market tickers dynamically
+
+    full_market=True: ALL US stocks (5000+) from NASDAQ + NYSE
+    full_market=False: Just S&P indices (~1500 quality stocks)
+    """
+    print("=" * 50)
+    print("Fetching current US market tickers...")
+    print("=" * 50)
+
+    all_tickers = []
+
+    if full_market:
+        # Get ALL traded stocks from official sources
+        all_tickers.extend(get_nasdaq_traded())
+        time.sleep(1)
+        all_tickers.extend(get_nyse_listed())
+    else:
+        # Just S&P indices for faster scanning
+        all_tickers.extend(get_sp500_tickers())
+        time.sleep(1)
+        all_tickers.extend(get_sp400_tickers())
+        time.sleep(1)
+        all_tickers.extend(get_sp600_tickers())
+        time.sleep(1)
+        all_tickers.extend(get_nasdaq100_tickers())
+
+    # Deduplicate and clean
+    tickers = sorted(list(set(all_tickers)))
+    tickers = [t for t in tickers if t and isinstance(t, str) and 1 <= len(t) <= 5]
+
+    print("=" * 50)
+    print(f"Total unique tickers: {len(tickers)}")
+    print("=" * 50)
+    return tickers
+
+# Fetch tickers dynamically (replaces hardcoded list)
+TICKERS = get_all_tickers()
+
+# Fallback S&P 500 list if dynamic fetch fails
+if len(TICKERS) < 100:
+    print("⚠️ Dynamic fetch failed, using fallback S&P 500 list...")
+    TICKERS = [
+        'AAPL', 'ABBV', 'ABT', 'ACN', 'ADBE', 'ADP', 'AMAT', 'AMD', 'AMGN', 'AMZN',
+        'AVGO', 'AXP', 'BA', 'BAC', 'BK', 'BKNG', 'BLK', 'BMY', 'BRK-B', 'C',
+        'CAT', 'CHTR', 'CL', 'CMCSA', 'COF', 'COP', 'COST', 'CRM', 'CSCO', 'CVS',
+        'CVX', 'DE', 'DHR', 'DIS', 'DOW', 'DUK', 'EMR', 'EXC', 'F', 'FDX',
+        'GD', 'GE', 'GILD', 'GM', 'GOOG', 'GOOGL', 'GS', 'HD', 'HON', 'IBM',
+        'INTC', 'INTU', 'ISRG', 'JNJ', 'JPM', 'KO', 'LIN', 'LLY', 'LMT', 'LOW',
+        'MA', 'MCD', 'MDLZ', 'MDT', 'MET', 'META', 'MMM', 'MO', 'MRK', 'MS',
+        'MSFT', 'NEE', 'NFLX', 'NKE', 'NOW', 'NVDA', 'ORCL', 'PEP', 'PFE', 'PG',
+        'PM', 'PYPL', 'QCOM', 'RTX', 'SBUX', 'SCHW', 'SO', 'SPG', 'T', 'TGT',
+        'TMO', 'TMUS', 'TSLA', 'TXN', 'UNH', 'UNP', 'UPS', 'USB', 'V', 'VZ',
+        'WFC', 'WMT', 'XOM',
+    ]
+    print(f"Fallback tickers: {len(TICKERS)}")
 
 # =============================================================================
 # INDICATORS
