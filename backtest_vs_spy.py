@@ -26,7 +26,7 @@ warnings.filterwarnings('ignore')
 # 'atr'    = ATR-based (volatility adjusted per stock)
 # 'pivot'  = Below recent swing low (support-based)
 # 'hybrid' = Pivot point with ATR buffer
-STOP_MODE = 'atr'  # <-- CHANGE THIS TO TEST DIFFERENT MODES
+STOP_MODE = 'fixed'  # Options: 'fixed', 'atr', 'pivot', 'hybrid' (fixed is optimal)
 
 # ATR-based settings
 ATR_STOP_MULT = 2.5           # Stop = Entry - (ATR * multiplier)
@@ -60,7 +60,7 @@ MAX_HOLD_DAYS = 120
 # 'same_day'    = Enter at signal day close (backtest-only, has look-ahead bias)
 # 'next_open'   = Signal after close, enter next day at open (realistic)
 # 'next_close'  = Signal after close, enter next day at close (most conservative)
-ENTRY_TIMING = 'next_close'  # <-- CHANGE THIS
+ENTRY_TIMING = 'next_open'  # Options: 'same_day', 'next_open', 'next_close' (next_open is optimal)
 
 USE_VIX_FILTER = True
 VIX_MIN = 20
