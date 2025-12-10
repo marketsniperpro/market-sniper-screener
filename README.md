@@ -1,6 +1,8 @@
-# Market Sniper Screener v3.0
+# VIX Screener
 
-A Python stock screener for swing trading with **VIX-based market timing**. Optimized for crash protection while capturing upside.
+**Buy when VIX 20-35 + RSI recovering + ADX trending**
+
+A swing trading screener with VIX-based market timing. Optimized for crash protection while capturing upside.
 
 ## Backtest Results (2019-2024)
 
