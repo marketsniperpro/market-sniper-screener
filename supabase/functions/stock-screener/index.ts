@@ -26,7 +26,7 @@ const CONFIG = {
 // Dynamic Stop Config
 // Modes: 'fixed', 'atr', 'pivot', 'hybrid'
 const STOP_CONFIG = {
-  MODE: 'atr',
+  MODE: 'fixed',
   ATR_STOP_MULT: 2.5,       // Stop = Entry - (ATR * multiplier)
   ATR_TRAIL_MULT: 2.0,      // Trailing distance
   REWARD_RISK_RATIO: 3.0,   // Take profit = Stop * R:R
