@@ -28,6 +28,7 @@ CREATE TABLE screener_picks (
     vix DECIMAL(5, 1),                    -- VIX at entry
     rsi DECIMAL(5, 1),                    -- Daily RSI
     adx DECIMAL(5, 1),                    -- ADX trend strength
+    atr DECIMAL(10, 2),                   -- ATR for volatility-based stops
     correction_pct DECIMAL(5, 1),         -- % below 52-week high
 
     -- Volume
@@ -38,6 +39,14 @@ CREATE TABLE screener_picks (
     pe_ratio DECIMAL(10, 2),
     roe DECIMAL(5, 1),
     debt_equity DECIMAL(5, 2),
+
+    -- Dynamic Stop Levels (per stock based on volatility)
+    stop_pct DECIMAL(5, 1),               -- Stop loss % (e.g., 8.5)
+    tp_pct DECIMAL(5, 1),                 -- Take profit % (e.g., 25.5)
+    trail_pct DECIMAL(5, 1),              -- Trailing stop distance %
+    stop_mode VARCHAR(10) DEFAULT 'atr',  -- 'fixed', 'atr', 'pivot', 'hybrid'
+    stop_price DECIMAL(10, 2),            -- Calculated stop price
+    tp_price DECIMAL(10, 2),              -- Calculated take profit price
 
     -- Signal scoring
     signal_score INTEGER,                 -- 0-100
@@ -109,9 +118,17 @@ SELECT
     END as unrealized_pct,
     rsi,
     adx,
+    atr,
     correction_pct,
     volume_ratio,
     pe_ratio,
+    -- Dynamic stop info
+    stop_pct,
+    tp_pct,
+    trail_pct,
+    stop_mode,
+    stop_price,
+    tp_price,
     signal_score,
     signal_strength,
     signal_factors

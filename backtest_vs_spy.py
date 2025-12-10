@@ -18,12 +18,49 @@ warnings.filterwarnings('ignore')
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
+
+# =============================================================================
+# STOP LOSS MODE - Choose your stop strategy
+# =============================================================================
+# 'fixed'  = Fixed percentage (15% stop, 50% target)
+# 'atr'    = ATR-based (volatility adjusted per stock)
+# 'pivot'  = Below recent swing low (support-based)
+# 'hybrid' = Pivot point with ATR buffer
+STOP_MODE = 'atr'  # <-- CHANGE THIS TO TEST DIFFERENT MODES
+
+# ATR-based settings
+ATR_STOP_MULT = 2.5           # Stop = Entry - (ATR * multiplier)
+ATR_TRAIL_MULT = 2.0          # Trailing distance = ATR * multiplier
+
+# Pivot-based settings
+PIVOT_LOOKBACK = 20           # Look back N bars for swing low
+PIVOT_BUFFER_PCT = 1.0        # Extra buffer below pivot (%)
+
+# Hybrid settings (pivot + ATR)
+HYBRID_ATR_BUFFER = 0.5       # Add 0.5x ATR below pivot
+
+# All modes use R:R ratio for take profit
+REWARD_RISK_RATIO = 3.0       # Take profit = Stop distance * R:R ratio
+
+# Bounds for all dynamic stops (prevents extreme values)
+MIN_STOP_PCT = 5.0            # Never tighter than 5%
+MAX_STOP_PCT = 25.0           # Never wider than 25%
+
+# Fixed stops (used when STOP_MODE = 'fixed')
 STOP_LOSS_PCT = 15.0
 TAKE_PROFIT_PCT = 50.0
 USE_TRAILING = True
 TRAIL_ACTIVATION_PCT = 15.0
 TRAIL_DISTANCE_PCT = 10.0
 MAX_HOLD_DAYS = 120
+
+# =============================================================================
+# ENTRY TIMING - For realistic execution
+# =============================================================================
+# 'same_day'    = Enter at signal day close (backtest-only, has look-ahead bias)
+# 'next_open'   = Signal after close, enter next day at open (realistic)
+# 'next_close'  = Signal after close, enter next day at close (most conservative)
+ENTRY_TIMING = 'next_close'  # <-- CHANGE THIS
 
 USE_VIX_FILTER = True
 VIX_MIN = 20
@@ -264,6 +301,78 @@ def calc_rsi(close, length=14):
     rs = avg_gain / avg_loss.replace(0, np.nan)
     return (100.0 - (100.0 / (1.0 + rs))).fillna(50)
 
+def calc_atr(high, low, close, length=14):
+    """Calculate Average True Range for volatility-based stops"""
+    prev_close = close.shift(1)
+    tr = pd.concat([high - low, (high - prev_close).abs(), (low - prev_close).abs()], axis=1).max(axis=1)
+    atr = tr.ewm(alpha=1/length, min_periods=length, adjust=False).mean()
+    return atr.fillna(0)
+
+def find_swing_low(low_prices, idx, lookback=20):
+    """
+    Find the most recent swing low (pivot point) before idx.
+    A swing low is a bar where the low is lower than N bars before and after.
+    """
+    start = max(0, idx - lookback)
+    window = low_prices[start:idx]
+    if len(window) < 5:
+        return low_prices[idx]  # Not enough data, use current low
+
+    # Find local minima in the window
+    swing_lows = []
+    for i in range(2, len(window) - 2):
+        if (window[i] < window[i-1] and window[i] < window[i-2] and
+            window[i] < window[i+1] and window[i] < window[i+2]):
+            swing_lows.append(window[i])
+
+    if swing_lows:
+        return min(swing_lows)  # Return lowest swing low
+    else:
+        return min(window)  # Fallback to lowest low in window
+
+def calc_dynamic_stop(entry_price, atr_value, low_prices, idx, mode='atr'):
+    """
+    Calculate dynamic stop loss based on mode.
+
+    Returns: (stop_pct, tp_pct, trail_pct)
+    """
+    if mode == 'fixed':
+        return STOP_LOSS_PCT, TAKE_PROFIT_PCT, TRAIL_DISTANCE_PCT
+
+    elif mode == 'atr':
+        # ATR-based: stop = entry - (ATR * multiplier)
+        stop_distance = atr_value * ATR_STOP_MULT
+        stop_pct = (stop_distance / entry_price) * 100
+        trail_pct = (atr_value * ATR_TRAIL_MULT / entry_price) * 100
+
+    elif mode == 'pivot':
+        # Pivot-based: stop below recent swing low
+        swing_low = find_swing_low(low_prices, idx, PIVOT_LOOKBACK)
+        stop_price = swing_low * (1 - PIVOT_BUFFER_PCT / 100)
+        stop_pct = ((entry_price - stop_price) / entry_price) * 100
+        trail_pct = stop_pct * 0.7  # Trail at 70% of initial stop distance
+
+    elif mode == 'hybrid':
+        # Hybrid: swing low with ATR buffer
+        swing_low = find_swing_low(low_prices, idx, PIVOT_LOOKBACK)
+        atr_buffer = atr_value * HYBRID_ATR_BUFFER
+        stop_price = swing_low - atr_buffer
+        stop_pct = ((entry_price - stop_price) / entry_price) * 100
+        trail_pct = (atr_value * ATR_TRAIL_MULT / entry_price) * 100
+
+    else:
+        # Default to fixed
+        return STOP_LOSS_PCT, TAKE_PROFIT_PCT, TRAIL_DISTANCE_PCT
+
+    # Apply bounds
+    stop_pct = max(MIN_STOP_PCT, min(MAX_STOP_PCT, stop_pct))
+    trail_pct = max(MIN_STOP_PCT * 0.5, min(MAX_STOP_PCT * 0.7, trail_pct))
+
+    # Take profit based on R:R ratio
+    tp_pct = stop_pct * REWARD_RISK_RATIO
+
+    return round(stop_pct, 1), round(tp_pct, 1), round(trail_pct, 1)
+
 def calc_adx(high, low, close, length=14):
     prev_close = close.shift(1)
     tr = pd.concat([high - low, (high - prev_close).abs(), (low - prev_close).abs()], axis=1).max(axis=1)
@@ -313,11 +422,25 @@ if isinstance(spy_df.columns, pd.MultiIndex):
 # =============================================================================
 # TRADE EXECUTION
 # =============================================================================
-def execute_trade(close, high, low, entry_idx, entry_price, dates):
-    """Execute trade and return result with exit date"""
-    stop_price = entry_price * (1 - STOP_LOSS_PCT / 100)
-    tp_price = entry_price * (1 + TAKE_PROFIT_PCT / 100)
-    activation_price = entry_price * (1 + TRAIL_ACTIVATION_PCT / 100)
+def execute_trade(close, high, low, entry_idx, entry_price, dates,
+                  stop_pct=None, tp_pct=None, trail_pct=None):
+    """
+    Execute trade and return result with exit date.
+
+    Args:
+        stop_pct: Stop loss % (dynamic or fixed)
+        tp_pct: Take profit % (dynamic or fixed)
+        trail_pct: Trailing stop distance % (dynamic or fixed)
+    """
+    # Use passed values or fall back to fixed config
+    stop_loss = stop_pct if stop_pct is not None else STOP_LOSS_PCT
+    take_profit = tp_pct if tp_pct is not None else TAKE_PROFIT_PCT
+    trail_dist = trail_pct if trail_pct is not None else TRAIL_DISTANCE_PCT
+    trail_activation = stop_loss  # Activate trailing at 1R profit
+
+    stop_price = entry_price * (1 - stop_loss / 100)
+    tp_price = entry_price * (1 + take_profit / 100)
+    activation_price = entry_price * (1 + trail_activation / 100)
     highest_high = entry_price
     trailing_active = False
     trailing_stop = stop_price
@@ -332,7 +455,9 @@ def execute_trade(close, high, low, entry_idx, entry_price, dates):
                 'exit_reason': 'still_open',
                 'exit_date': None,
                 'exit_price': close[-1],
-                'trailing_activated': trailing_active
+                'trailing_activated': trailing_active,
+                'stop_pct': stop_loss,
+                'tp_pct': take_profit
             }
 
         day_high, day_low = high[idx], low[idx]
@@ -342,7 +467,7 @@ def execute_trade(close, high, low, entry_idx, entry_price, dates):
         if USE_TRAILING and not trailing_active and day_high >= activation_price:
             trailing_active = True
         if trailing_active:
-            trailing_stop = max(trailing_stop, highest_high * (1 - TRAIL_DISTANCE_PCT / 100))
+            trailing_stop = max(trailing_stop, highest_high * (1 - trail_dist / 100))
 
         current_stop = trailing_stop if trailing_active else stop_price
 
@@ -353,16 +478,20 @@ def execute_trade(close, high, low, entry_idx, entry_price, dates):
                 'exit_reason': 'trail_stop' if trailing_active else 'stop',
                 'exit_date': dates[idx].strftime('%Y-%m-%d'),
                 'exit_price': current_stop,
-                'trailing_activated': trailing_active
+                'trailing_activated': trailing_active,
+                'stop_pct': stop_loss,
+                'tp_pct': take_profit
             }
         if day_high >= tp_price:
             return {
-                'return_pct': TAKE_PROFIT_PCT,
+                'return_pct': take_profit,
                 'exit_day': day,
                 'exit_reason': 'target',
                 'exit_date': dates[idx].strftime('%Y-%m-%d'),
                 'exit_price': tp_price,
-                'trailing_activated': trailing_active
+                'trailing_activated': trailing_active,
+                'stop_pct': stop_loss,
+                'tp_pct': take_profit
             }
 
     exit_price = close[entry_idx + MAX_HOLD_DAYS]
@@ -372,7 +501,9 @@ def execute_trade(close, high, low, entry_idx, entry_price, dates):
         'exit_reason': 'max_days',
         'exit_date': dates[entry_idx + MAX_HOLD_DAYS].strftime('%Y-%m-%d'),
         'exit_price': exit_price,
-        'trailing_activated': trailing_active
+        'trailing_activated': trailing_active,
+        'stop_pct': stop_loss,
+        'tp_pct': take_profit
     }
 
 # =============================================================================
@@ -396,12 +527,14 @@ def scan_stock(ticker):
             df.columns = [col[0] for col in df.columns]
 
         close, high, low, volume = df['Close'].values, df['High'].values, df['Low'].values, df['Volume'].values
+        open_prices = df['Open'].values  # For next-day open entry
         dates = df.index
 
         close_s, high_s, low_s, vol_s = pd.Series(close), pd.Series(high), pd.Series(low), pd.Series(volume)
         rsi = calc_rsi(close_s, 14).values
         adx, _, _ = calc_adx(high_s, low_s, close_s, 14)
         adx = adx.values
+        atr = calc_atr(high_s, low_s, close_s, 14).values  # For dynamic stops
         sma_200 = close_s.rolling(200).mean().values
         sma_slope = ((pd.Series(sma_200) - pd.Series(sma_200).shift(SMA_SLOPE_DAYS)) / pd.Series(sma_200).shift(SMA_SLOPE_DAYS) * 100).values
         high_52w = high_s.rolling(252).max().values
@@ -444,14 +577,45 @@ def scan_stock(ticker):
                 if np.isnan(vol_avg[i]) or vol_avg[i] == 0 or volume[i] / vol_avg[i] < VOLUME_SURGE_MULT:
                     continue
 
-            trade = execute_trade(close, high, low, i, price, dates)
+            # =====================================================
+            # ENTRY TIMING - Determine actual entry price and index
+            # =====================================================
+            signal_date = date_str  # Day signal was detected
+            if ENTRY_TIMING == 'same_day':
+                # Enter at signal day close (look-ahead bias in real trading)
+                entry_idx = i
+                entry_price = close[i]
+            elif ENTRY_TIMING == 'next_open':
+                # Signal after close, enter next day at open
+                if i + 1 >= len(df):
+                    continue  # No next day data
+                entry_idx = i + 1
+                entry_price = open_prices[i + 1]
+            else:  # 'next_close'
+                # Signal after close, enter next day at close (most conservative)
+                if i + 1 >= len(df):
+                    continue  # No next day data
+                entry_idx = i + 1
+                entry_price = close[i + 1]
+
+            entry_date = dates[entry_idx].strftime('%Y-%m-%d')
+
+            # Calculate dynamic stops based on mode (using entry price)
+            atr_val = atr[entry_idx] if not np.isnan(atr[entry_idx]) else entry_price * 0.02
+            stop_pct, tp_pct, trail_pct = calc_dynamic_stop(entry_price, atr_val, low, entry_idx, STOP_MODE)
+
+            trade = execute_trade(close, high, low, entry_idx, entry_price, dates,
+                                  stop_pct=stop_pct, tp_pct=tp_pct, trail_pct=trail_pct)
+
+            # Position size based on actual stop distance
             risk_dollars = STARTING_CAPITAL * (RISK_PER_TRADE_PCT / 100)
-            position = min(risk_dollars / (STOP_LOSS_PCT / 100), STARTING_CAPITAL * MAX_POSITION_PCT / 100)
+            position = min(risk_dollars / (stop_pct / 100), STARTING_CAPITAL * MAX_POSITION_PCT / 100)
 
             signals.append({
                 'ticker': ticker,
-                'entry_date': date_str,
-                'entry_price': round(price, 2),
+                'signal_date': signal_date,          # When signal was detected
+                'entry_date': entry_date,            # When position was entered
+                'entry_price': round(entry_price, 2),
                 'exit_date': trade['exit_date'],
                 'exit_price': round(trade['exit_price'], 2),
                 'vix': round(vix_val, 1),
@@ -463,6 +627,9 @@ def scan_stock(ticker):
                 'pnl': round(position * trade['return_pct'] / 100, 0),
                 'pe': fund_details.get('pe'),
                 'roe': fund_details.get('roe'),
+                'stop_pct': stop_pct,
+                'tp_pct': tp_pct,
+                'atr': round(atr_val, 2),
             })
             last_idx = i
 
@@ -476,6 +643,17 @@ def scan_stock(ticker):
 print(f"\n{'='*70}")
 print(f"MARKET SNIPER - BACKTEST vs SPY")
 print(f"Period: {START_DATE} to {END_DATE}")
+print(f"Stop Mode: {STOP_MODE.upper()} | Entry: {ENTRY_TIMING.upper()}")
+if STOP_MODE == 'atr':
+    print(f"  ATR Mult: {ATR_STOP_MULT}x stop, {ATR_TRAIL_MULT}x trail, {REWARD_RISK_RATIO}:1 R:R")
+elif STOP_MODE == 'pivot':
+    print(f"  Pivot: {PIVOT_LOOKBACK} bar lookback, {PIVOT_BUFFER_PCT}% buffer, {REWARD_RISK_RATIO}:1 R:R")
+elif STOP_MODE == 'hybrid':
+    print(f"  Hybrid: Pivot + {HYBRID_ATR_BUFFER}x ATR buffer, {REWARD_RISK_RATIO}:1 R:R")
+else:
+    print(f"  Fixed: {STOP_LOSS_PCT}% stop, {TAKE_PROFIT_PCT}% target")
+if ENTRY_TIMING == 'same_day':
+    print(f"  ⚠️ same_day has look-ahead bias - use next_close for realistic results")
 print(f"{'='*70}")
 
 all_signals = []
@@ -512,6 +690,12 @@ print(f"{'='*70}")
 print(f"Total signals: {len(df)}")
 print(f"Closed trades: {len(closed)}")
 print(f"Active positions: {len(active)}")
+
+# Dynamic stop statistics
+if 'stop_pct' in df.columns and len(df) > 0:
+    print(f"\nDynamic Stop Statistics:")
+    print(f"  Avg Stop: {df['stop_pct'].mean():.1f}% | Min: {df['stop_pct'].min():.1f}% | Max: {df['stop_pct'].max():.1f}%")
+    print(f"  Avg Target: {df['tp_pct'].mean():.1f}%")
 
 # =============================================================================
 # CLOSED TRADES ANALYSIS

@@ -122,17 +122,54 @@ ADX_MIN = 18                  # Minimum trend strength
 MIN_BELOW_HIGH_PCT = 25       # Min correction from high
 MAX_BELOW_HIGH_PCT = 50       # Max correction (not falling knife)
 
-# Risk Management
-STOP_LOSS_PCT = 15.0          # Stop loss
-TAKE_PROFIT_PCT = 50.0        # Take profit (3.3:1 R/R)
-TRAIL_ACTIVATION_PCT = 15.0   # Trailing stop activation
-TRAIL_DISTANCE_PCT = 10.0     # Trailing distance
-
 # Fundamentals
 MAX_PE_RATIO = 30
 MIN_ROE = 8
 MAX_DEBT_EQUITY = 2.0
 ```
+
+### Dynamic Stop Modes
+
+Instead of fixed stops, use volatility-adjusted stops per stock:
+
+```python
+STOP_MODE = 'atr'  # Choose: 'fixed', 'atr', 'pivot', 'hybrid'
+```
+
+| Mode | Description | Best For |
+|------|-------------|----------|
+| `fixed` | Fixed 15% stop, 50% target | Simple, consistent |
+| `atr` | 2.5x ATR stop, 3:1 R:R target | Volatility-adjusted |
+| `pivot` | Below recent swing low | Support-based |
+| `hybrid` | Swing low + 0.5x ATR buffer | Most conservative |
+
+**ATR Settings:**
+```python
+ATR_STOP_MULT = 2.5           # Stop = Entry - (ATR * 2.5)
+ATR_TRAIL_MULT = 2.0          # Trail = ATR * 2.0
+REWARD_RISK_RATIO = 3.0       # TP = Stop distance * 3
+MIN_STOP_PCT = 5.0            # Never tighter than 5%
+MAX_STOP_PCT = 25.0           # Never wider than 25%
+```
+
+**Example:**
+- Stock at $100, ATR = $4
+- ATR Stop: $100 - ($4 × 2.5) = $90 (10% stop)
+- ATR Target: $100 + (10% × 3) = $130 (30% target)
+
+### Entry Timing
+
+For realistic backtesting, signal and entry can be separated:
+
+```python
+ENTRY_TIMING = 'next_close'  # Choose: 'same_day', 'next_open', 'next_close'
+```
+
+| Mode | Description | Realism |
+|------|-------------|---------|
+| `same_day` | Enter at signal close | Look-ahead bias |
+| `next_open` | Signal after close, enter next open | Realistic |
+| `next_close` | Signal after close, enter next close | Most conservative |
 
 ### Scan Modes
 ```python

@@ -23,6 +23,19 @@ const CONFIG = {
   MAX_DEBT_EQUITY: 2,
 };
 
+// Dynamic Stop Config
+// Modes: 'fixed', 'atr', 'pivot', 'hybrid'
+const STOP_CONFIG = {
+  MODE: 'atr',
+  ATR_STOP_MULT: 2.5,       // Stop = Entry - (ATR * multiplier)
+  ATR_TRAIL_MULT: 2.0,      // Trailing distance
+  REWARD_RISK_RATIO: 3.0,   // Take profit = Stop * R:R
+  MIN_STOP_PCT: 5.0,        // Minimum stop %
+  MAX_STOP_PCT: 25.0,       // Maximum stop %
+  FIXED_STOP_PCT: 15.0,     // Fixed mode stop
+  FIXED_TP_PCT: 50.0,       // Fixed mode target
+};
+
 // S&P 500 + S&P 400 tickers (fallback - fetched dynamically in scan)
 const TICKERS = [
   'AAPL', 'ABBV', 'ABT', 'ACN', 'ADBE', 'ADP', 'AMAT', 'AMD', 'AMGN', 'AMZN',
@@ -49,6 +62,8 @@ interface StockData {
   high52w: number;
   rsi: number;
   adx: number;
+  atr: number;
+  lows: number[];
   volume: number;
   avgVolume: number;
   pe?: number;
@@ -105,6 +120,9 @@ async function getStockData(ticker: string): Promise<StockData | null> {
     // Calculate ADX (14-period)
     const adx = calculateADX(highs, lows, closes, 14);
 
+    // Calculate ATR (14-period) for dynamic stops
+    const atr = calculateATR(highs, lows, closes, 14);
+
     // Average volume (50-day)
     const avgVolume = volumes.slice(-50).reduce((a: number, b: number) => a + b, 0) / 50;
 
@@ -114,6 +132,8 @@ async function getStockData(ticker: string): Promise<StockData | null> {
       high52w: quote.fiftyTwoWeekHigh,
       rsi,
       adx,
+      atr,
+      lows,  // For pivot-based stops
       volume: quote.regularMarketVolume,
       avgVolume,
       pe: quote.forwardPE || quote.trailingPE,
@@ -171,6 +191,92 @@ function calculateADX(highs: number[], lows: number[], closes: number[], period:
   }
 
   return sumDX / period;
+}
+
+// ATR Calculation
+function calculateATR(highs: number[], lows: number[], closes: number[], period: number): number {
+  if (highs.length < period + 1) return 0;
+
+  let sumTR = 0;
+  for (let i = highs.length - period; i < highs.length; i++) {
+    const tr = Math.max(
+      highs[i] - lows[i],
+      Math.abs(highs[i] - closes[i - 1]),
+      Math.abs(lows[i] - closes[i - 1])
+    );
+    sumTR += tr;
+  }
+  return sumTR / period;
+}
+
+// Find swing low (pivot point)
+function findSwingLow(lows: number[], lookback: number = 20): number {
+  const window = lows.slice(-lookback);
+  return Math.min(...window);
+}
+
+// Calculate dynamic stop based on mode
+interface StopLevels {
+  stopPct: number;
+  tpPct: number;
+  trailPct: number;
+  mode: string;
+}
+
+function calculateDynamicStop(
+  entryPrice: number,
+  atr: number,
+  lows: number[],
+  mode: string = 'atr'
+): StopLevels {
+  let stopPct: number;
+  let trailPct: number;
+
+  if (mode === 'fixed') {
+    return {
+      stopPct: STOP_CONFIG.FIXED_STOP_PCT,
+      tpPct: STOP_CONFIG.FIXED_TP_PCT,
+      trailPct: STOP_CONFIG.FIXED_STOP_PCT * 0.7,
+      mode
+    };
+  }
+
+  if (mode === 'atr') {
+    // ATR-based: stop = entry - (ATR * multiplier)
+    const stopDistance = atr * STOP_CONFIG.ATR_STOP_MULT;
+    stopPct = (stopDistance / entryPrice) * 100;
+    trailPct = (atr * STOP_CONFIG.ATR_TRAIL_MULT / entryPrice) * 100;
+  } else if (mode === 'pivot') {
+    // Pivot-based: stop below recent swing low
+    const swingLow = findSwingLow(lows, 20);
+    const stopPrice = swingLow * 0.99; // 1% buffer
+    stopPct = ((entryPrice - stopPrice) / entryPrice) * 100;
+    trailPct = stopPct * 0.7;
+  } else if (mode === 'hybrid') {
+    // Hybrid: swing low with ATR buffer
+    const swingLow = findSwingLow(lows, 20);
+    const atrBuffer = atr * 0.5;
+    const stopPrice = swingLow - atrBuffer;
+    stopPct = ((entryPrice - stopPrice) / entryPrice) * 100;
+    trailPct = (atr * STOP_CONFIG.ATR_TRAIL_MULT / entryPrice) * 100;
+  } else {
+    stopPct = STOP_CONFIG.FIXED_STOP_PCT;
+    trailPct = STOP_CONFIG.FIXED_STOP_PCT * 0.7;
+  }
+
+  // Apply bounds
+  stopPct = Math.max(STOP_CONFIG.MIN_STOP_PCT, Math.min(STOP_CONFIG.MAX_STOP_PCT, stopPct));
+  trailPct = Math.max(STOP_CONFIG.MIN_STOP_PCT * 0.5, Math.min(STOP_CONFIG.MAX_STOP_PCT * 0.7, trailPct));
+
+  // Take profit based on R:R ratio
+  const tpPct = stopPct * STOP_CONFIG.REWARD_RISK_RATIO;
+
+  return {
+    stopPct: Math.round(stopPct * 10) / 10,
+    tpPct: Math.round(tpPct * 10) / 10,
+    trailPct: Math.round(trailPct * 10) / 10,
+    mode
+  };
 }
 
 // Calculate signal score (0-100)
@@ -301,6 +407,14 @@ serve(async (req) => {
 
         const volumeRatio = stock.volume / stock.avgVolume;
 
+        // Calculate dynamic stops
+        const stopLevels = calculateDynamicStop(
+          stock.price,
+          stock.atr,
+          stock.lows,
+          STOP_CONFIG.MODE
+        );
+
         signals.push({
           ticker: stock.ticker,
           company_name: stock.name,
@@ -309,6 +423,7 @@ serve(async (req) => {
           current_price: stock.price,
           rsi: stock.rsi,
           adx: stock.adx,
+          atr: stock.atr,
           correction_pct: correctionPct,
           volume_ratio: volumeRatio,
           volume_spike: volumeRatio > 1.5,
@@ -317,7 +432,15 @@ serve(async (req) => {
           signal_strength: strength,
           signal_score: score,
           signal_factors: factors,
-          notes: `VIX: ${vix.toFixed(1)}`,
+          // Dynamic stop levels
+          stop_pct: stopLevels.stopPct,
+          tp_pct: stopLevels.tpPct,
+          trail_pct: stopLevels.trailPct,
+          stop_mode: stopLevels.mode,
+          stop_price: stock.price * (1 - stopLevels.stopPct / 100),
+          tp_price: stock.price * (1 + stopLevels.tpPct / 100),
+          vix: vix,
+          notes: `VIX: ${vix.toFixed(1)} | Stop: ${stopLevels.stopPct}% | TP: ${stopLevels.tpPct}%`,
         });
 
         // Rate limit
